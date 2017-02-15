@@ -1,4 +1,4 @@
-﻿/*
+/*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
  Versão 1.1  
@@ -17,12 +17,13 @@ namespace KW
 
     public class KWHttpServer
     {
-        public class Methods 
-        { 
-            public static  string POST{ get{ return "POST"; } }
-            public static string GET{ get{ return "GET"; } }
-            public static string PUT{ get{ return "PUT"; } }
-            public static string DELETE{ get{ return "DELETE"; } }
+        public class Methods
+        {
+
+            public static string POST { get { return "POST"; } }
+            public static string GET { get { return "GET"; } }
+            public static string PUT { get { return "PUT"; } }
+            public static string DELETE { get { return "DELETE"; } }
             public static string UNKNOWN { get { return "UNKNOWN"; } }
 
 
@@ -34,10 +35,12 @@ namespace KW
 
         private TcpListener myListener;
         private int port = 5050;  // Select any free port you wish 
-        private bool autoSendFiles;
+        private bool conf_autoSendFiles;
+        private string conf_filesFolder = "";
+        private bool conf_multiThread = true;
+        private bool conf_keepAlive = false;
         private bool rodando;
         private Thread th;
-        private string filesFolder = "";
 
         public delegate byte[] OnReadyToSendDelegate(string method, string getUrl, string body, string mimeType, byte[] buffer, Socket tcpClient);
 
@@ -47,15 +50,18 @@ namespace KW
         //retornar null para evitar processamento excessivo (executado antes de enviar o conteúdo para o browser)
         public OnReadyToSendDelegate onReadyToSend;
 
-        
 
 
-        public KWHttpServer(int port, bool pautoSendFiles, string autoSendFiles_fodler = "")
+
+        public KWHttpServer(int port, bool pconf_autoSendFiles, string conf_autoSendFiles_fodler = "", bool use_multiThreads = true, bool useKeepAliveConnection = false)
         {
-            this.autoSendFiles = pautoSendFiles;
-            this.filesFolder = autoSendFiles_fodler;
-            if ((this.filesFolder.Length > 0) && (this.filesFolder[this.filesFolder.Length-1] != '\\'))
-                this.filesFolder += '\\';
+            this.conf_multiThread = use_multiThreads;
+            this.conf_autoSendFiles = pconf_autoSendFiles;
+            this.conf_filesFolder = conf_autoSendFiles_fodler;
+            this.conf_keepAlive = useKeepAliveConnection;
+
+            if ((this.conf_filesFolder.Length > 0) && (this.conf_filesFolder[this.conf_filesFolder.Length - 1] != '\\'))
+                this.conf_filesFolder += '\\';
 
             try
             {
@@ -84,15 +90,6 @@ namespace KW
             //EVITA A SAída da pasta, para proteger o servidor
             //substitui em um while para evitar "montagens" com a uri
             //utiliza um sistema máxim de contagem de loops para evitar travamentos
-            /*int loops = 0;
-            while (getUrl.IndexOf("..") > -1)
-            {
-                getUrl = getUrl.Replace("..", "");
-                loops++;
-                if (loops >= 10)
-                    return;
-            }*/
-
             if (getUrl.IndexOf("..") > -1)
             {
                 binaryResp = new byte[0];
@@ -110,37 +107,37 @@ namespace KW
                 if (getUrl == "/")
                 {
                     mime = "text/html";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + "index.htm");
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.htm");
                 }
                 else if (getUrl.IndexOf(".gif") > -1)
                 {
                     mime = "image/gif";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else if (getUrl.IndexOf(".jpg") > -1)
                 {
                     mime = "image/jpeg";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else if (getUrl.IndexOf(".png") > -1)
                 {
                     mime = "image/png";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else if (getUrl.IndexOf(".js") > -1)
                 {
                     mime = "text/javascript";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else if (getUrl.IndexOf(".css") > -1)
                 {
                     mime = "text/css";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else
                 {
                     mime = "text/html";
-                    binaryResp = System.IO.File.ReadAllBytes(filesFolder + getUrl.Split('=')[1]);
+                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
             }
             catch (Exception e)
@@ -163,32 +160,11 @@ namespace KW
             th.Interrupt();
         }
 
+        List<Thread> threads = new List<Thread>();
         private void StartListen()
         {
             rodando = true;
-            byte[] buffer;
-            string dataSend = "";
-            string getUrl;
-            string msg = "";
-            byte[] binaryResp = null;
-            string mime = "";
-            int cont;
-            int status = 200;
-            string opHeaders = "";
-
-            byte[] tempBuf;
             Socket mySocket = null;
-            string sBuffer = "";
-            int contentLength = 0;
-            string tempS;
-
-            int contentStart = 0;
-            //make a byte array and receive data from the client 
-            Byte[] bReceive;// = new Byte[1024];
-            string body;
-            string method;
-
-            string strHeader = "";
 
             while (rodando)
             {
@@ -197,7 +173,21 @@ namespace KW
                     break;
 
                 if (myListener.Pending())
+                {
                     mySocket = myListener.AcceptSocket();
+                    if (this.conf_multiThread)
+                    {
+                        //cria uma thread para escutar o socket
+                        int index = threads.Count;
+
+
+                        Thread temp = new Thread(delegate() { escutaCliente(mySocket, index); });
+                        threads.Add(temp);
+                        temp.Start();
+                    }
+                    else
+                        this.escutaCliente(mySocket, -1);
+                }
                 else
                 {
                     try
@@ -207,218 +197,337 @@ namespace KW
                     }
                     catch (Exception e) { continue; }
                 }
+            }
+            return;
+        }
+
+        /*private void log(string msg, bool notifyController = true)
+        {
+            msg = DateTime.Now.ToString() + ": " + msg;
+            try
+            {
+                string appPath = System.IO.Path.GetDirectoryName(System.Windows.Forms.Application.ExecutablePath) + "\\";
+                if (System.IO.File.Exists(appPath + "kwwebserver.log"))
+                    System.IO.File.AppendAllText(appPath + "kwwebserver.log", msg + "\n");
+                else
+                    System.IO.File.WriteAllText(appPath + "kwwebserver.log", msg + "\n");
+            }
+            catch { }
+        }*/
 
 
 
-                mySocket.ReceiveTimeout = 2500;
+        //%%%%%% Converter para máquina de estados (recebndoCabeçalho, recebendoConteúdo, processandoDados, RetornandoDados, FinalziandoConexao)
+        public void escutaCliente(Socket mySocket, int threadIndex)
+        {
+            byte[] buffer;
+            string dataSend = "";
+            string getUrl = "";
+            string msg = "";
+            byte[] binaryResp = null;
+            string mime = "";
+            int cont;
+            int status = 200;
+            string opHeaders = "";
+            byte[] tempBuf;
+            string sBuffer = "";
+            int contentLength = 0;
+            string tempS;
+            int contentStart = 0;
+            Byte[] bReceive;// = new Byte[1024];
+            string body = "";
+            string method = Methods.UNKNOWN;
 
-                if (mySocket.Connected)
+            string strHeader = "";
+
+            int readTimeout = 10000;
+            mySocket.ReceiveTimeout = 2500;
+            while (mySocket.Connected)
+            {
+                readTimeout -= 10;
+
+                if (readTimeout < 0)
+                {
+                    mySocket.Close();
+                    return;
+                }
+
+                try
                 {
 
-                    
-                    try
+                    int i = 1;
+
+                    while (/*(i > 0) &&*/ (mySocket.Available > 0))
                     {
-                        sBuffer = "";
-                        int i = 1;
-                        while ((i > 0) && (mySocket.Available > 0))
+                        try
                         {
-                            try
-                            {
+                            bReceive = new byte[mySocket.Available];
 
-                                bReceive = new byte[mySocket.Available];
+                            i = mySocket.Receive(bReceive, mySocket.Available, 0);
+                            sBuffer += Encoding.ASCII.GetString(bReceive);
 
-                                i = mySocket.Receive(bReceive, mySocket.Available, 0);
-                                sBuffer += Encoding.ASCII.GetString(bReceive);
-                            }
-                            catch { break; }
+                            //reinicia o timeout, para, por exemplo, quando se está fazendo um upload
+                            readTimeout = 60000;
                         }
+                        catch { break; }
                     }
-                    catch (Exception e)
+                }
+                catch (Exception e)
+                {
+                    mySocket.Close();
+                    break;
+                }
+
+                try
+                {
+                    contentStart = 0;
+
+                    //verifica se já recebeu todo o cabeçalho
+                    if (sBuffer.IndexOf("\r\n\r\n") > -1)
+                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\n\r\n"));
+                    else if (sBuffer.IndexOf("\n\n") > -1)
+                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\n\n"));
+                    else if (sBuffer.IndexOf("\r\r") > -1)
+                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\r"));
+                    else
                     {
-                        mySocket.Close();
+
+                        Thread.Sleep(10);
+
                         continue;
                     }
 
-                    
-                    try
-                    {
-                        contentStart = 0;
-                        //Convert Byte to String
-                        
 
-                        //verifica se já recebeu todo o cabeçalho
-                        if (sBuffer.IndexOf("\r\n\r\n") > -1) 
-                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\n\r\n"));
-                        else if (sBuffer.IndexOf("\n\n") > -1)
-                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\n\n"));
-                        else if (sBuffer.IndexOf("\r\r") > -1)
-                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\r"));
-                        else
-                            continue;
+                    if (strHeader != "")
+                    {
+                        contentStart = sBuffer.IndexOf("\r\n\r\n") + 4;
+                        if (contentStart == 3)
+                            contentStart = sBuffer.IndexOf("\n\n") + 2;
+                        if (contentStart == 1)
+                            contentStart = sBuffer.IndexOf("\r\r") + 2;
 
                         //verifica se possui o "content-length"
-                        if (sBuffer.ToLower().IndexOf("content-length:") > -1)
+                        if (strHeader.ToLower().IndexOf("content-length:") > -1)
                         {
                             //caso tenha recebido o content-length, verififca se recebeu todo o conteúdo
-                            tempS = sBuffer.Substring(sBuffer.ToLower().IndexOf("content-length:"));
+                            tempS = strHeader.Substring(sBuffer.ToLower().IndexOf("content-length:"));
                             tempS = tempS.ToLower();
                             tempS = tempS.Split('\n')[0];
                             tempS = tempS.Replace("content-length:", "");
                             tempS = tempS.Replace(" ", "");
                             tempS = tempS.Replace("\r", "");
                             contentLength = Int32.Parse(tempS);
+
                             
-                            contentStart = sBuffer.IndexOf("\r\n\r\n") + 4;
-                            if (contentStart == 3)
-                                contentStart = sBuffer.IndexOf("\n\n") + 2;
-                            if (contentStart == 1)
-                                contentStart = sBuffer.IndexOf("\r\r") + 2;
-                            
+
+
                             if ((sBuffer.Length - contentStart) < contentLength)
+                            {
+
+                                Thread.Sleep(10);
+
                                 continue;
+                            }
                         }
+                        /*else
+                        {
+                            Thread.Sleep(10);
+
+                            continue;
+                        }*/
+
 
                         //pega a url requisitada
-                    
-                        getUrl = sBuffer.Substring(sBuffer.IndexOf(' ')+1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
+                        getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
                         getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
                         body = "";
+
                         if (contentStart > 0)
                             body = sBuffer.Substring(contentStart);
-                        
-                        /*method =  Methods.UNKNOWN;
-                        if (sBuffer.Substring(0, 3).ToUpper() == "GET")
-                            method = Methods.GET;
-                        else if (sBuffer.Substring(0, 4).ToUpper() == "POST")
-                            method = Methods.POST;
-                        else if (sBuffer.Substring(0, 2).ToUpper() == "PUT")
-                            method = Methods.PUT;
-                        else if (sBuffer.Substring(0, 6).ToUpper() == "DELETE")
-                            method = Methods.DELETE;
-                        else*/
+
                         method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
                     }
-                    catch { continue; }
-                    if (getUrl == "")
-                        continue;
-
-                    
-
-                    //getUrl = System.Text.RegularExpressions.Regex.Unescape(getUrl);
-                    //pega os dados que são enviados por post
-                    
-                    //verifica se já possui todo o conteudo
-
-
-                    //At present we will only deal with GET type
-                    if (method != Methods.UNKNOWN)
-                    {
-
-                        status = 200;
-
-                        msg = null;
-                        binaryResp = null;
-                        if (this.onClienteDataSend != null)
-                        {
-                            msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket);
-                        }
-
-                        if ((autoSendFiles) && ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html")) && (binaryResp == null) && (msg == null))
-                        {
-                            loadFile(getUrl, out binaryResp, out mime, out status);
-                        }
-
-
-
-                        if (binaryResp == null)
-                        {
-                            if (msg == null)
-                                msg = "";
-
-                            if (onContentReady != null)
-                            {
-                                byte[] temp = onContentReady(method, getUrl, body, "text/html", System.Text.Encoding.Default.GetBytes(msg), mySocket);
-                                if (temp != null)
-                                    msg = System.Text.Encoding.Default.GetString(temp);
-                            }
-
-                            if (status == 0)
-                                status = 200;
-
-                            if (mime == "")
-                                mime = "text/html; charset=UTF-8";
-
-                            if (opHeaders != "")
-                                opHeaders = "\n" + opHeaders;
-
-                            dataSend = "HTTP/1.1 "+status.ToString()+" OK\n" +
-                                //"Date: Mon, 23 May 2005 22:38:34 GMT\n" +
-                                                                //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
-                                                                "Server: Kiwiisco Webserver 1.1, embedded version\n" +
-                                //"Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n" +
-                                //"ETag: \"3f80f-1b6-3e1cb03b\"\n" +
-                                                                "Content-Type: "+mime+"\n" +
-                                                                "Content-Length: " + Convert.ToString(msg.Length) + "\n" +
-                                                                "Accept-Ranges: bytes\n" +
-                                                                "Connection: close"+
-                                                                opHeaders + "\n\n" + msg;
-
-                            mime = "text/html";
-                            buffer = Encoding.ASCII.GetBytes(dataSend);
-                        }
-                        else
-                        {
-                            if (onContentReady != null)
-                            {
-                                byte[] temp = onContentReady(method, getUrl, body, mime, binaryResp, mySocket);
-                                if (temp != null)
-                                    binaryResp = temp;
-                            }
-
-                            /*status = 401;
-                            "WWW-Authenticate:	Basic realm=\"TP-LINK Wireless N Router WR841N\"" +*/
-                            if (opHeaders != "")
-                                opHeaders = "\n" + opHeaders;
-
-                            dataSend = "HTTP/1.1 " + status.ToString() + " OK\n" +  
-                                    
-                                //"Date: Mon, 23 May 2005 22:38:34 GMT\n" +
-                                                                //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
-                                                                "Server: Kiwiisco Webserver 1.1, embedded version\n" +
-                                //"Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n" +
-                                //"ETag: \"3f80f-1b6-3e1cb03b\"\n" +
-                                                                "Content-Type: " + mime + "\n" +
-                                                                "Content-Length: " + Convert.ToString(binaryResp.Length) + "\n" +
-                                                                "Accept-Ranges: bytes\n" +
-                                                                "Connection: close"+
-                                                                opHeaders + "\n\n";
-                            
-
-                            //coloca os dados binários no buffer
-                            buffer = new byte[dataSend.Length + binaryResp.Length];
-                            for (cont = 0; cont < dataSend.Length; cont++)
-                                buffer[cont] = Convert.ToByte(dataSend[cont]);
-
-                            for (cont = 0; cont < binaryResp.Length; cont++)
-                                buffer[cont + dataSend.Length] = binaryResp[cont];
-
-
-
-                        }
-
-                        
-                        if (onReadyToSend != null)
-                        {
-                            byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket);
-                            if (temp != null)
-                                buffer = temp;
-                        }
-
-                        mySocket.Send(buffer);
-                        mySocket.Close();
-                    }
                 }
+                catch { mySocket.Close(); break; }
+
+                if (getUrl == "")
+                    break; ;
+
+                //pega os dados que são enviados por post
+                //verifica se já possui todo o conteudo
+                if (method != Methods.UNKNOWN)
+                {
+
+                    status = 200;
+
+                    msg = null;
+                    binaryResp = null;
+                    if (this.onClienteDataSend != null)
+                    {
+                        msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket);
+                    }
+
+                    if ((conf_autoSendFiles) && ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html")) && (binaryResp == null) && (msg == null))
+                    {
+                        loadFile(getUrl, out binaryResp, out mime, out status);
+                    }
+
+
+
+                    if (binaryResp == null)
+                    {
+                        if (msg == null)
+                            msg = "";
+
+                        if (onContentReady != null)
+                        {
+                            byte[] temp = onContentReady(method, getUrl, body, "text/html", System.Text.Encoding.Default.GetBytes(msg), mySocket);
+                            if (temp != null)
+                                msg = System.Text.Encoding.Default.GetString(temp);
+                        }
+
+                        if (status == 0)
+                            status = 200;
+
+                        if (mime == "")
+                            mime = "text/html; charset=UTF-8";
+
+                        if (opHeaders != "")
+                            opHeaders = "\r\n" + opHeaders;
+
+                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
+                                                            "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
+                                                            "Content-Type: " + mime + "\r\n" +
+                                                            "Content-Length: " + Convert.ToString(msg.Length) + "\r\n" +
+                                                            "Accept-Ranges: bytes\r\n" +
+                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
+                                                            opHeaders + "\r\n\r\n" + msg;
+
+                        mime = "text/html";
+                        buffer = Encoding.ASCII.GetBytes(dataSend);
+                    }
+                    else
+                    {
+                        if (onContentReady != null)
+                        {
+                            byte[] temp = onContentReady(method, getUrl, body, mime, binaryResp, mySocket);
+                            if (temp != null)
+                                binaryResp = temp;
+                        }
+
+                        /*status = 401;
+                        "WWW-Authenticate:	Basic realm=\"TP-LINK Wireless N Router WR841N\"" +*/
+                        if (opHeaders != "")
+                            opHeaders = "\r\n" + opHeaders;
+
+                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
+                                                            "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
+                                                            "Content-Type: " + mime + "\r\n" +
+                                                            "Content-Length: " + Convert.ToString(binaryResp.Length) + "\r\n" +
+                                                            "Accept-Ranges: bytes\r\n" +
+                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
+                                                            opHeaders + "\r\n\r\n";
+
+
+                        //coloca os dados binários no buffer
+                        buffer = new byte[dataSend.Length + binaryResp.Length];
+                        for (cont = 0; cont < dataSend.Length; cont++)
+                            buffer[cont] = Convert.ToByte(dataSend[cont]);
+
+                        for (cont = 0; cont < binaryResp.Length; cont++)
+                            buffer[cont + dataSend.Length] = binaryResp[cont];
+
+
+
+                    }
+
+
+                    if (onReadyToSend != null)
+                    {
+                        byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket);
+                        if (temp != null)
+                            buffer = temp;
+                    }
+
+                    try
+                    {
+                        mySocket.Send(buffer);
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            mySocket.Close();
+                        }
+                        catch { }
+                    }
+
+                }
+                Thread.Sleep(10);
             }
+            if (mySocket.Connected)
+            {
+                mySocket.Close();
+            }
+        }
+
+        Dictionary<int, string> translates = null;
+        private string getHttpCodeDescription(int httpCode)
+        {
+            //só carrega a lista da primeira vez
+            if (translates == null)
+            {
+                translates = new Dictionary<int, string>();
+
+                translates.Add(100, "Continue");
+                translates.Add(101, "Switching Protocols");
+                translates.Add(200, "OK");
+                translates.Add(201, "Created");
+                translates.Add(202, "Accepted");
+                translates.Add(203, "Non-Authoritative Information");
+                translates.Add(204, "No Content");
+                translates.Add(205, "Reset Content");
+                translates.Add(206, "Partial Content");
+                translates.Add(300, "Multiple Choices");
+                translates.Add(301, "Moved Permanently");
+                translates.Add(302, "Found");
+                translates.Add(303, "See Other");
+                translates.Add(304, "Not Modified");
+                translates.Add(305, "Use Proxy");
+                translates.Add(306, "(Unused)");
+                translates.Add(307, "Temporary Redirect");
+                translates.Add(400, "Bad Request");
+                translates.Add(401, "Unauthorized");
+                translates.Add(402, "Payment Required");
+                translates.Add(403, "Forbidden");
+                translates.Add(404, "Not Found");
+                translates.Add(405, "Method Not Allowed");
+                translates.Add(406, "Not Acceptable");
+                translates.Add(407, "Proxy Authentication Required");
+                translates.Add(408, "Request Timeout");
+                translates.Add(409, "Conflict");
+                translates.Add(410, "Gone");
+                translates.Add(411, "Length Required");
+                translates.Add(412, "Precondition Failed");
+                translates.Add(413, "Request Entity Too Large");
+                translates.Add(414, "Request-URI Too Long");
+                translates.Add(415, "Unsupported Media Type");
+                translates.Add(416, "Requested Range Not Satisfiable");
+                translates.Add(417, "Expectation Failed");
+                translates.Add(500, "Internal Server Error");
+                translates.Add(501, "Not Implemented");
+                translates.Add(502, "Bad Gateway");
+                translates.Add(503, "Service Unavailable");
+                translates.Add(504, "Gateway Timeout");
+                translates.Add(505, "HTTP Version Not Supported");
+            }
+
+            if (translates.Keys.ToList().IndexOf(httpCode) > -1)
+                return translates[httpCode];
+            else
+                return "Other";
+
+
         }
     }
 }
