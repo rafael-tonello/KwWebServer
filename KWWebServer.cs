@@ -398,13 +398,13 @@ namespace KW
                         dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
                                                             "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
                                                             "Content-Type: " + mime + "\r\n" +
-                                                            "Content-Length: " + Convert.ToString(msg.Length) + "\r\n" +
+                                                            "Content-Length: " + Convert.ToString(Encoding.UTF8.GetByteCount(msg)) + "\r\n" +
                                                             "Accept-Ranges: bytes\r\n" +
                                                             "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
                                                             opHeaders + "\r\n\r\n" + msg;
 
                         mime = "text/html";
-                        buffer = Encoding.ASCII.GetBytes(dataSend);
+                        buffer = Encoding.UTF8.GetBytes(dataSend);
                     }
                     else
                     {
