@@ -1,10 +1,10 @@
 /*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
-    Versão 2.0, 15/06/2016
+    Versão 2.2, 15/06/2016
   
    changeLog:
-       -added multithread https support
+       -Resolvido o problema do Chrome, que não enviava dados quandoa  conexão era iniciada.
  
   
   Http example
@@ -102,7 +102,8 @@ namespace KW
 
             try
             {
-                
+
+
                 //start listing on the given port
                 myListener = new TcpListener(port);
                 myListener.Start();
@@ -225,22 +226,23 @@ namespace KW
         //a função abaixo retorna se a requisição trata-se de um arquivo válido
         private bool isValidFileRequest(string getUrl)
         {
-            if( (getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html"))
+            if ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html"))
                 return true;
 
             if (getUrl.IndexOf('?') > -1)
                 getUrl = getUrl.Split('?')[0];
 
 
-            
-            if ((getUrl.Length > 0) && (getUrl[0]== '/'))
+
+
+            if ((getUrl.Length > 0) && (getUrl[0] == '/'))
                 getUrl = getUrl.Substring(1);
-            if ((getUrl.Length > 0) && (getUrl[getUrl.Length-1]== '/'))
-                getUrl = getUrl.Substring(0, getUrl.Length-1);
+            if ((getUrl.Length > 0) && (getUrl[getUrl.Length - 1] == '/'))
+                getUrl = getUrl.Substring(0, getUrl.Length - 1);
 
             getUrl = conf_filesFolder + getUrl;
             if (File.Exists(getUrl))
-                    return true;
+                return true;
 
             if (Directory.Exists(getUrl))
             {
@@ -270,55 +272,68 @@ namespace KW
             TcpClient mySocket = null;
 
 
-            
 
+
+            bool acceptOk = true;
             while (rodando)
             {
                 //Accept a new connection
                 if (myListener == null)
                     break;
 
-                myListener.BeginAcceptTcpClient(delegate(IAsyncResult ar)
+
+                if (acceptOk)
                 {
-                    TcpListener listener = (TcpListener)ar.AsyncState;
-                    TcpClient client = listener.EndAcceptTcpClient(ar);
 
-                    //escutaCliente(client, 0);
-                    Thread temp = new Thread(delegate() { escutaCliente(client, 0); });
-                    threads.Add(temp);
-                    temp.Start();
-                }, myListener);
-                
 
-                Thread.Sleep(10);
 
-                //if (myListener.Pending())
-                //{
-                   
-                    /*if ((this.conf_multiThread) && (!useHttps))
+
+
+
+
+
+
+
+
+                    acceptOk = false;
+
+
+
+
+
+                    myListener.BeginAcceptTcpClient(delegate(IAsyncResult ar)
                     {
-                        //cria uma thread para escutar o socket
-                        int index = threads.Count;
 
 
-                        
 
-                        Thread temp = new Thread(delegate() { escutaCliente(mySocket, index); });
+
+
+                        acceptOk = true;
+                        TcpListener listener = (TcpListener)ar.AsyncState;
+                        TcpClient client = listener.EndAcceptTcpClient(ar);
+
+                        //escutaCliente(client, 0);
+                        Thread temp = new Thread(delegate() { escutaCliente(client, 0); });
                         threads.Add(temp);
                         temp.Start();
-                    }
-                    else
-                        this.escutaCliente(mySocket, -1);*/
-                //}
-                /*else
-                {
-                    try
-                    {
-                        Thread.Sleep(10);
-                        continue;
-                    }
-                    catch (Exception e) { continue; }
-                }*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    }, myListener);
+                }
+
+
+                Thread.Sleep(10);
             }
             return;
         }
@@ -358,6 +373,21 @@ namespace KW
             else
                 sslStream = new NetworkStream(mySocket.Client, true);
 
+            //o navegador google chrome, as vezes, demora para abrir a conexão e enviar os dados. Caso isso aconteca, aguarda um segundo
+
+            readTimeout = 1000;
+            while ((mySocket == null) || (mySocket.Client == null) || (!mySocket.Client.Connected))
+            {
+                readTimeout--;
+                System.Threading.Thread.Sleep(10);
+                readTimeout--;
+
+                if (readTimeout <= 0)
+                    return;
+            }
+
+            readTimeout = 1000;
+
             while ((mySocket != null) && (mySocket.Client != null) && (mySocket.Client.Connected))
             {
                 try
@@ -371,10 +401,20 @@ namespace KW
 
 
                         readTimeout -= 10;
+                        System.Threading.Thread.Sleep(10);
 
                         if (readTimeout < 0)
                         {
-                            //mySocket.Client.Close();
+
+                            mySocket.Close();
+                            sslStream.Close();
+                            sslStream.Dispose();
+                            buffer = new byte[0];
+                            binaryResp = new byte[0];
+                            tempBuf = new byte[0];
+                            bReceive = new byte[0];
+
+
                             return;
                         }
 
@@ -385,10 +425,31 @@ namespace KW
                             sslStream.WriteTimeout = 100;
 
                             sBuffer = ReadMessage(sslStream, mySocket);
+
+                            if (sBuffer == "")
+                            {
+                                mySocket.Close();
+                                sslStream.Close();
+                                sslStream.Dispose();
+                                buffer = new byte[0];
+                                binaryResp = new byte[0];
+                                tempBuf = new byte[0];
+                                bReceive = new byte[0];
+
+
+                                return;
+                            }
                         }
                         catch (Exception e)
                         {
-                            //mySocket.Client.Close();
+
+                            mySocket.Close();
+                            sslStream.Close();
+                            sslStream.Dispose();
+                            buffer = new byte[0];
+                            binaryResp = new byte[0];
+                            tempBuf = new byte[0];
+                            bReceive = new byte[0];
                             break;
                         }
                     }
@@ -456,7 +517,17 @@ namespace KW
                             method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
                         }
                     }
-                    catch { /*mySocket.Client.Close(); break;*/ }
+
+                    catch
+                    {
+                        mySocket.Close();
+                        sslStream.Close();
+                        sslStream.Dispose();
+                        buffer = new byte[0];
+                        binaryResp = new byte[0];
+                        tempBuf = new byte[0];
+                        bReceive = new byte[0];
+                    }
 
                     if (getUrl == "")
                         break; ;
@@ -568,7 +639,14 @@ namespace KW
                         {
                             try
                             {
-                                //mySocket.Client.Close();
+
+                                mySocket.Close();
+                                sslStream.Close();
+                                sslStream.Dispose();
+                                buffer = new byte[0];
+                                binaryResp = new byte[0];
+                                tempBuf = new byte[0];
+                                bReceive = new byte[0];
                             }
                             catch { }
                         }
