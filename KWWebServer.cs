@@ -1,11 +1,10 @@
 /*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
-    Versão 3.0, 24/11/2016
+    Versão 3.1, 24/01/2017
   
    changeLog:
-       -O tratamento das requisições foi colocada em uma máquina de estados
-       - Foi adicionado o suporte à WebSockets.
+       - Unescape nas URIs
  
   
   Http example
@@ -258,8 +257,10 @@ namespace KW
             while (cont < conf_filesFolders.Count)
             {
                 string getUrlCurrent = conf_filesFolders[cont] + getUrl;
-                if (File.Exists(getUrlCurrent))
+                if (File.Exists(getUrlCurrent) == true)
+                {
                     return true;
+                }
                 else
                 {
                     if (Directory.Exists(getUrlCurrent))
@@ -494,6 +495,7 @@ namespace KW
 
                         getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
                         getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
+                        getUrl = System.Uri.UnescapeDataString(getUrl);
 
                         method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
 
