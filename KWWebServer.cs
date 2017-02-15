@@ -1,7 +1,7 @@
 /*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
- Versão 1.2
+ Versão 1.3
  
  */
 using System;
@@ -30,6 +30,7 @@ namespace Libs.IO
         private Thread th;
         private string conf_filesFolder = "";
         private bool conf_multiThread = false;
+        private bool conf_keepAlive = false;
 
         public delegate byte[] OnReadyToSendDelegate(Method method, string getUrl, string body, string mimeType, byte[] buffer, Socket tcpClient);
 
@@ -39,15 +40,16 @@ namespace Libs.IO
         //retornar null para evitar processamento excessivo (executado antes de enviar o conteúdo para o browser)
         public OnReadyToSendDelegate onReadyToSend;
 
-        
 
 
-        public KWWebServer(int port, bool pconf_autoSendFiles, string conf_autoSendFiles_fodler = "", bool useconf_multiThreads = false)
+
+        public KWWebServer(int port, bool pconf_autoSendFiles, string conf_autoSendFiles_fodler = "", bool useconf_multiThreads = false, bool useKeepAliveConnection = false)
         {
             this.conf_multiThread = useconf_multiThreads;
             this.conf_autoSendFiles = pconf_autoSendFiles;
             this.conf_filesFolder = conf_autoSendFiles_fodler;
-            if ((this.conf_filesFolder.Length > 0) && (this.conf_filesFolder[this.conf_filesFolder.Length-1] != '\\'))
+            this.conf_keepAlive = useKeepAliveConnection;
+            if ((this.conf_filesFolder.Length > 0) && (this.conf_filesFolder[this.conf_filesFolder.Length - 1] != '\\'))
                 this.conf_filesFolder += '\\';
 
             try
@@ -159,7 +161,7 @@ namespace Libs.IO
 
         private void StartListen2(Socket mySocket)
         {
-                rodando = true;
+            rodando = true;
             byte[] buffer;
             string dataSend = "";
             string getUrl;
@@ -189,7 +191,7 @@ namespace Libs.IO
 
                 try
                 {
-                        
+
                     i = 1;
                     while (i > 0) // && (mySocket.Available > 0))
                     {
@@ -210,13 +212,15 @@ namespace Libs.IO
                     mySocket.Close();
                     continue;
                 }
+                
+                if (sBuffer == "")
+                    continue;
 
-                    
                 try
                 {
                     contentStart = 0;
                     //Convert Byte to String
-                        
+
 
                     //verifica se já recebeu todo o conteúdo
                     if ((sBuffer.IndexOf("\r\n\r\n") > -1) && (sBuffer.IndexOf("\n\n") > -1) && (sBuffer.IndexOf("\r\r") > -1))
@@ -233,26 +237,26 @@ namespace Libs.IO
                         tempS = tempS.Replace(" ", "");
                         tempS = tempS.Replace("\r", "");
                         contentLength = Int32.Parse(tempS);
-                            
+
                         contentStart = sBuffer.IndexOf("\r\n\r\n") + 4;
                         if (contentStart == 3)
                             contentStart = sBuffer.IndexOf("\n\n") + 2;
                         if (contentStart == 1)
                             contentStart = sBuffer.IndexOf("\r\r") + 2;
-                            
+
                         if ((sBuffer.Length - contentStart) < contentLength)
                             continue;
                     }
 
                     //pega a url requisitada
-                    
-                    getUrl = sBuffer.Substring(sBuffer.IndexOf(' ')+1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
+
+                    getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
                     getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
                     body = "";
                     if (contentStart > 0)
                         body = sBuffer.Substring(contentStart);
-                        
-                    method =  Method.UNKNOWN;
+
+                    method = Method.UNKNOWN;
                     if (sBuffer.Substring(0, 3) == "GET")
                         method = Method.GET;
                     else if (sBuffer.Substring(0, 4) == "POST")
@@ -262,11 +266,11 @@ namespace Libs.IO
                 if (getUrl == "")
                     continue;
 
-                    
+
 
                 //getUrl = System.Text.RegularExpressions.Regex.Unescape(getUrl);
                 //pega os dados que são enviados por post
-                    
+
                 //verifica se já possui todo o conteudo
 
 
@@ -304,14 +308,15 @@ namespace Libs.IO
 
                         dataSend = "HTTP/1.1 200 OK\n" +
                             //"Date: Mon, 23 May 2005 22:38:34 GMT\n" +
-                                                            //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
+                            //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
                                                             "Server: Kiwiisco Webserver 1.1, embedded version\n" +
                             //"Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n" +
                             //"ETag: \"3f80f-1b6-3e1cb03b\"\n" +
                                                             "Content-Type: text/html; charset=UTF-8\n" +
                                                             "Content-Length: " + Convert.ToString(msg.Length) + "\n" +
                                                             "Accept-Ranges: bytes\n" +
-                                                            "Connection: close\n\n" + msg;
+                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") + "\n\n" + 
+                                                            msg;
 
                         mime = "text/html";
                         buffer = Encoding.ASCII.GetBytes(dataSend);
@@ -328,18 +333,18 @@ namespace Libs.IO
                         /*status = 401;
                         "WWW-Authenticate:	Basic realm=\"TP-LINK Wireless N Router WR841N\"" +*/
 
-                        dataSend = "HTTP/1.1 " + status.ToString() + " OK\n" +  
-                                    
+                        dataSend = "HTTP/1.1 " + status.ToString() + " OK\n" +
+
                             //"Date: Mon, 23 May 2005 22:38:34 GMT\n" +
-                                                            //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
+                            //"Server: Apache/1.3.3.7 (Unix) (Red-Hat/Linux)\n" +
                                                             "Server: Kiwiisco Webserver 1.1, embedded version\n" +
                             //"Last-Modified: Wed, 08 Jan 2003 23:11:55 GMT\n" +
                             //"ETag: \"3f80f-1b6-3e1cb03b\"\n" +
                                                             "Content-Type: " + mime + "\n" +
                                                             "Content-Length: " + Convert.ToString(binaryResp.Length) + "\n" +
                                                             "Accept-Ranges: bytes\n" +
-                                                            "Connection: close\n\n";
-                            
+                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") + "\n\n";
+
 
                         //coloca os dados binários no buffer
                         buffer = new byte[dataSend.Length + binaryResp.Length];
@@ -353,7 +358,7 @@ namespace Libs.IO
 
                     }
 
-                        
+
                     if (onReadyToSend != null)
                     {
                         byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket);
@@ -362,35 +367,19 @@ namespace Libs.IO
                     }
 
                     mySocket.Send(buffer);
-                    mySocket.Close();
+                    //if (!keepALive)
+                    if (dataSend.ToLower().IndexOf("connection: keep-alive") == -1)
+                        mySocket.Close();
                 }
             }
         }
+
+        
         private void StartListen()
         {
             rodando = true;
-            byte[] buffer;
-            string dataSend = "";
-            string getUrl;
-            string msg = "";
-            byte[] binaryResp = null;
-            string mime = "";
-            int cont;
-            int status = 200;
-
-            byte[] tempBuf;
             Socket mySocket = null;
-            string sBuffer = "";
-            int contentLength = 0;
-            string tempS;
-
-            int contentStart = 0;
-            //make a byte array and receive data from the client 
-            Byte[] bReceive = new byte[1024];
-            string body;
-            Method method;
-            int i;
-
+            
             while (rodando)
             {
                 //Accept a new connection
