@@ -4,7 +4,7 @@
     Versão 2.0, 15/06/2016
   
    changeLog:
-       -added https support
+       -added multithread https support
  
   
   Http example
@@ -154,40 +154,62 @@ namespace KW
             try
             {
                 httpStatus = 200;
+
+
                 if (getUrl == "/")
                 {
-                    mime = "text/html";
+                    mime = "text/html; charset=UTF-8";
                     binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.htm");
-                }
-                else if (getUrl.IndexOf(".gif") > -1)
-                {
-                    mime = "image/gif";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
-                }
-                else if (getUrl.IndexOf(".jpg") > -1)
-                {
-                    mime = "image/jpeg";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
-                }
-                else if (getUrl.IndexOf(".png") > -1)
-                {
-                    mime = "image/png";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
-                }
-                else if (getUrl.IndexOf(".js") > -1)
-                {
-                    mime = "text/javascript";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
-                }
-                else if (getUrl.IndexOf(".css") > -1)
-                {
-                    mime = "text/css";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
                 }
                 else
                 {
-                    mime = "text/html";
-                    binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    if (getUrl.ToUpper().IndexOf("FILE=") == -1)
+                    {
+                        if ((getUrl.Length > 0) && (getUrl[0] == '/'))
+                            getUrl = getUrl.Substring(1);
+
+                        if ((getUrl.Length > 0) && (getUrl[getUrl.Length - 1] == '/'))
+                            getUrl = getUrl.Substring(0, getUrl.Length - 1);
+
+                        if (Directory.Exists(conf_filesFolder + getUrl))
+                        {
+                            getUrl = getUrl + "/index.htm";
+                        }
+
+
+                        getUrl = "file=" + getUrl;
+                    }
+
+                    if (getUrl.IndexOf(".gif") > -1)
+                    {
+                        mime = "image/gif";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
+                    else if (getUrl.IndexOf(".jpg") > -1)
+                    {
+                        mime = "image/jpeg";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
+                    else if (getUrl.IndexOf(".png") > -1)
+                    {
+                        mime = "image/png";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
+                    else if (getUrl.IndexOf(".js") > -1)
+                    {
+                        mime = "text/javascript";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
+                    else if (getUrl.IndexOf(".css") > -1)
+                    {
+                        mime = "text/css";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
+                    else
+                    {
+                        mime = "text/html; charset=UTF-8";// "text/html";
+                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + getUrl.Split('=')[1]);
+                    }
                 }
             }
             catch (Exception e)
@@ -198,6 +220,36 @@ namespace KW
                     binaryResp[cont] = Convert.ToByte(e.Message[cont]);
                 httpStatus = 500;
             }
+        }
+
+        //a função abaixo retorna se a requisição trata-se de um arquivo válido
+        private bool isValidFileRequest(string getUrl)
+        {
+            if( (getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html"))
+                return true;
+
+            if (getUrl.IndexOf('?') > -1)
+                getUrl = getUrl.Split('?')[0];
+
+
+            
+            if ((getUrl.Length > 0) && (getUrl[0]== '/'))
+                getUrl = getUrl.Substring(1);
+            if ((getUrl.Length > 0) && (getUrl[getUrl.Length-1]== '/'))
+                getUrl = getUrl.Substring(0, getUrl.Length-1);
+
+            getUrl = conf_filesFolder + getUrl;
+            if (File.Exists(getUrl))
+                    return true;
+
+            if (Directory.Exists(getUrl))
+            {
+                getUrl = getUrl + "/index.htm";
+                if (File.Exists(getUrl))
+                    return true;
+            }
+
+            return false;
         }
 
 
@@ -211,10 +263,14 @@ namespace KW
         }
 
         List<Thread> threads = new List<Thread>();
+
         private void StartListen()
         {
             rodando = true;
             TcpClient mySocket = null;
+
+
+            
 
             while (rodando)
             {
@@ -222,23 +278,39 @@ namespace KW
                 if (myListener == null)
                     break;
 
-                if (myListener.Pending())
+                myListener.BeginAcceptTcpClient(delegate(IAsyncResult ar)
                 {
-                    mySocket = myListener.AcceptTcpClient();
-                    if (this.conf_multiThread)
+                    TcpListener listener = (TcpListener)ar.AsyncState;
+                    TcpClient client = listener.EndAcceptTcpClient(ar);
+
+                    //escutaCliente(client, 0);
+                    Thread temp = new Thread(delegate() { escutaCliente(client, 0); });
+                    threads.Add(temp);
+                    temp.Start();
+                }, myListener);
+                
+
+                Thread.Sleep(10);
+
+                //if (myListener.Pending())
+                //{
+                   
+                    /*if ((this.conf_multiThread) && (!useHttps))
                     {
                         //cria uma thread para escutar o socket
                         int index = threads.Count;
 
+
+                        
 
                         Thread temp = new Thread(delegate() { escutaCliente(mySocket, index); });
                         threads.Add(temp);
                         temp.Start();
                     }
                     else
-                        this.escutaCliente(mySocket, -1);
-                }
-                else
+                        this.escutaCliente(mySocket, -1);*/
+                //}
+                /*else
                 {
                     try
                     {
@@ -246,28 +318,15 @@ namespace KW
                         continue;
                     }
                     catch (Exception e) { continue; }
-                }
+                }*/
             }
             return;
         }
 
-        /*private void log(string msg, bool notifyController = true)
-        {
-            msg = DateTime.Now.ToString() + ": " + msg;
-            try
-            {
-                string appPath = System.IO.Path.GetDirectoryName(System.Windows.Forms.Application.ExecutablePath) + "\\";
-                if (System.IO.File.Exists(appPath + "kwwebserver.log"))
-                    System.IO.File.AppendAllText(appPath + "kwwebserver.log", msg + "\n");
-                else
-                    System.IO.File.WriteAllText(appPath + "kwwebserver.log", msg + "\n");
-            }
-            catch { }
-        }*/
-
-
 
         //%%%%%% Converter para máquina de estados (recebndoCabeçalho, recebendoConteúdo, processandoDados, RetornandoDados, FinalziandoConexao)
+
+        int sslLock = 0;
         public void escutaCliente(TcpClient mySocket, int threadIndex)
         {
             byte[] buffer;
@@ -297,34 +356,41 @@ namespace KW
             if (useHttps)
                 sslStream = new SslStream(mySocket.GetStream(), false);
             else
-                sslStream = new NetworkStream(mySocket.Client);
-            try
+                sslStream = new NetworkStream(mySocket.Client, true);
+
+            while ((mySocket != null) && (mySocket.Client != null) && (mySocket.Client.Connected))
             {
-                if (useHttps)
-                    ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls, true);
-
-                while ((mySocket != null) && (mySocket.Connected))
+                try
                 {
-                    readTimeout -= 10;
-
-                    if (readTimeout < 0)
+                    //lock (serverCertificate)
                     {
-                        mySocket.Close();
-                        return;
-                    }
+                        if (useHttps)
+                        {
+                            ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls | SslProtocols.Tls11 | SslProtocols.Tls12 | SslProtocols.Ssl2 | SslProtocols.Ssl3, true);
+                        }
 
-                    try
-                    {
 
-                        sslStream.ReadTimeout = 1000;
-                        sslStream.WriteTimeout = 1000;
-                        
-                        sBuffer = ReadMessage(sslStream);
-                    }
-                    catch (Exception e)
-                    {
-                        mySocket.Close();
-                        break;
+                        readTimeout -= 10;
+
+                        if (readTimeout < 0)
+                        {
+                            //mySocket.Client.Close();
+                            return;
+                        }
+
+                        try
+                        {
+
+                            sslStream.ReadTimeout = 100;
+                            sslStream.WriteTimeout = 100;
+
+                            sBuffer = ReadMessage(sslStream, mySocket);
+                        }
+                        catch (Exception e)
+                        {
+                            //mySocket.Client.Close();
+                            break;
+                        }
                     }
 
                     try
@@ -390,7 +456,7 @@ namespace KW
                             method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
                         }
                     }
-                    catch { mySocket.Close(); break; }
+                    catch { /*mySocket.Client.Close(); break;*/ }
 
                     if (getUrl == "")
                         break; ;
@@ -409,7 +475,7 @@ namespace KW
                             msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket.Client);
                         }
 
-                        if ((conf_autoSendFiles) && ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html")) && (binaryResp == null) && (msg == null))
+                        if ((conf_autoSendFiles) && (isValidFileRequest(getUrl)) && (binaryResp == null) && (msg == null))
                         {
                             loadFile(getUrl, out binaryResp, out mime, out status);
                         }
@@ -462,6 +528,9 @@ namespace KW
                             if (opHeaders != "")
                                 opHeaders = "\r\n" + opHeaders;
 
+                            if (mime == "")
+                                mime = "text/html; charset=UTF-8";
+
                             dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
                                                                 "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
                                                                 "Content-Type: " + mime + "\r\n" +
@@ -499,7 +568,7 @@ namespace KW
                         {
                             try
                             {
-                                mySocket.Close();
+                                //mySocket.Client.Close();
                             }
                             catch { }
                         }
@@ -507,69 +576,108 @@ namespace KW
                     }
                     Thread.Sleep(10);
                 }
-            }
-            catch (AuthenticationException e)
-            {
-                Console.WriteLine("Exception: {0}", e.Message);
-                if (e.InnerException != null)
+
+                catch (AuthenticationException e)
                 {
-                    Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                    Console.WriteLine("Exception: {0}", e.Message);
+                    if (e.InnerException != null)
+                    {
+                        Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                    }
+                    Console.WriteLine("Authentication failed - closing the connection.");
+                    //sslStream.Close();
+                    //mySocket.Client.Close();
+                    System.Threading.Thread.Sleep(200);
+                    return;
                 }
-                Console.WriteLine("Authentication failed - closing the connection.");
-                sslStream.Close();
-                mySocket.Close();
-                return;
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Exception: {0}", e.Message);
-                if (e.InnerException != null)
+                catch (Exception e)
                 {
-                    Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                    Console.WriteLine("Exception: {0}", e.Message);
+                    if (e.InnerException != null)
+                    {
+                        Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                    }
+                    Console.WriteLine("Authentication failed - closing the connection.");
+                    //sslStream.Close();
+                    //mySocket.Client.Close();
+                    System.Threading.Thread.Sleep(200);
+                    return;
                 }
-                Console.WriteLine("Authentication failed - closing the connection.");
-                sslStream.Close();
-                mySocket.Close();
-                return;
             }
 
-            if (mySocket.Connected)
+
+            if ((mySocket != null) && (mySocket.Client != null) && (mySocket.Connected))
             {
-                mySocket.Close();
+                //mySocket.Client.Close();
             }
         }
 
-        private string ReadMessage(Stream sslStream)
+        private string ReadMessage(Stream sslStream, TcpClient client)
         {
             // Read the  message sent by the client.
             // The client signals the end of the message using the
             // "<EOF>" marker.
-            byte[] buffer = new byte[2048];
-            StringBuilder messageData = new StringBuilder();
-            int bytes = -1;
-            do
+            if (useHttps)
             {
+                byte[] buffer = new byte[2048];
+                StringBuilder messageData = new StringBuilder();
+                int bytes = -1;
+                do
+                {
+                    try
+                    {
+                        // Read the client's test message.
+                        bytes = sslStream.Read(buffer, 0, buffer.Length);
+
+                        // Use Decoder class to convert from bytes to UTF8
+                        // in case a character spans two buffers.
+                        Decoder decoder = Encoding.UTF8.GetDecoder();
+                        char[] chars = new char[decoder.GetCharCount(buffer, 0, bytes)];
+                        decoder.GetChars(buffer, 0, bytes, chars, 0);
+                        messageData.Append(chars);
+                        // Check for EOF or an empty message.
+                        /*if (messageData.ToString().IndexOf("<EOF>") != -1)
+                        {
+                            break;
+                        }*/
+                    }
+                    catch { break; }
+                } while (bytes != 0);
+
+                return messageData.ToString();
+            }
+            else
+            {
+                Byte[] bReceive;// = new Byte[1024];
+                string sBuffer = "";
                 try
                 {
-                    // Read the client's test message.
-                    bytes = sslStream.Read(buffer, 0, buffer.Length);
 
-                    // Use Decoder class to convert from bytes to UTF8
-                    // in case a character spans two buffers.
-                    Decoder decoder = Encoding.UTF8.GetDecoder();
-                    char[] chars = new char[decoder.GetCharCount(buffer, 0, bytes)];
-                    decoder.GetChars(buffer, 0, bytes, chars, 0);
-                    messageData.Append(chars);
-                    // Check for EOF or an empty message.
-                    /*if (messageData.ToString().IndexOf("<EOF>") != -1)
+                    int i = 1;
+
+                    while (/*(i > 0) &&*/ (client.Client.Available > 0))
                     {
-                        break;
-                    }*/
-                }
-                catch { break; }
-            } while (bytes != 0);
+                        try
+                        {
+                            bReceive = new byte[client.Client.Available];
 
-            return messageData.ToString();
+                            i = client.Client.Receive(bReceive, client.Client.Available, 0);
+                            sBuffer += Encoding.ASCII.GetString(bReceive);
+
+                            //reinicia o timeout, para, por exemplo, quando se está fazendo um upload
+                        }
+                        catch { break; }
+                    }
+
+                    return sBuffer;
+                }
+                catch (Exception e)
+                {
+                    return "";
+                }
+
+
+            }
         }
 
         Dictionary<int, string> translates = null;
