@@ -1,7 +1,38 @@
 /*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
- Versão 1.1  
+    Versão 2.0, 15/06/2016
+  
+   changeLog:
+       -added https support
+ 
+  
+  Http example
+           KW.KWHttpServer temp = new KW.KWHttpServer(80, false);
+            temp.onClienteDataSend += delegate(string method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, System.Net.Sockets.Socket tcpClient)
+            {
+                opBinary = null;
+                opMime = "";
+                opHttpStatus = 200;
+                opHeaders = "";
+
+
+                return "lol, sem https";
+            };
+  
+  Https example
+           KW.KWHttpServer temp = new KW.KWHttpServer(443, false);
+            temp.enableHttps(@"C:\Users\engenharia4\Desktop\https\dinv001.pfx", "inovadaq");
+            temp.onClienteDataSend += delegate(string method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, System.Net.Sockets.Socket tcpClient)
+            {
+                opBinary = null;
+                opMime = "";
+                opHttpStatus = 200;
+                opHeaders = "";
+
+
+                return "lol, com https";
+            };
  
  */
 using System;
@@ -11,12 +42,18 @@ using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using System.IO;
 
 namespace KW
 {
 
     public class KWHttpServer
     {
+        X509Certificate serverCertificate = null;
+        bool useHttps = false;
         public class Methods
         {
 
@@ -65,6 +102,7 @@ namespace KW
 
             try
             {
+                
                 //start listing on the given port
                 myListener = new TcpListener(port);
                 myListener.Start();
@@ -78,6 +116,18 @@ namespace KW
             {
             }
 
+        }
+
+        public bool enableHttps(string pfxCert, string pfxPass)
+        {
+            try
+            {
+                serverCertificate = new X509Certificate(pfxCert, pfxPass);//@"C:\Users\engenharia4\Desktop\https\dinv001.pfx", "inovadaq");//X509Certificate2.CreateFromCertFile(@"C:\Users\engenharia4\Desktop\https\server.pfx", "inovadaq");
+                useHttps = true;
+            }
+            catch { useHttps = false; }
+
+            return useHttps;
         }
 
         ~KWHttpServer()
@@ -164,7 +214,7 @@ namespace KW
         private void StartListen()
         {
             rodando = true;
-            Socket mySocket = null;
+            TcpClient mySocket = null;
 
             while (rodando)
             {
@@ -174,7 +224,7 @@ namespace KW
 
                 if (myListener.Pending())
                 {
-                    mySocket = myListener.AcceptSocket();
+                    mySocket = myListener.AcceptTcpClient();
                     if (this.conf_multiThread)
                     {
                         //cria uma thread para escutar o socket
@@ -218,7 +268,7 @@ namespace KW
 
 
         //%%%%%% Converter para máquina de estados (recebndoCabeçalho, recebendoConteúdo, processandoDados, RetornandoDados, FinalziandoConexao)
-        public void escutaCliente(Socket mySocket, int threadIndex)
+        public void escutaCliente(TcpClient mySocket, int threadIndex)
         {
             byte[] buffer;
             string dataSend = "";
@@ -242,233 +292,284 @@ namespace KW
 
             int readTimeout = 10000;
             mySocket.ReceiveTimeout = 2500;
-            while (mySocket.Connected)
+
+            Stream sslStream = null;
+            if (useHttps)
+                sslStream = new SslStream(mySocket.GetStream(), false);
+            else
+                sslStream = new NetworkStream(mySocket.Client);
+            try
             {
-                readTimeout -= 10;
+                if (useHttps)
+                    ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls, true);
 
-                if (readTimeout < 0)
+                while ((mySocket != null) && (mySocket.Connected))
                 {
-                    mySocket.Close();
-                    return;
-                }
+                    readTimeout -= 10;
 
-                try
-                {
-
-                    int i = 1;
-
-                    while (/*(i > 0) &&*/ (mySocket.Available > 0))
+                    if (readTimeout < 0)
                     {
-                        try
-                        {
-                            bReceive = new byte[mySocket.Available];
-
-                            i = mySocket.Receive(bReceive, mySocket.Available, 0);
-                            sBuffer += Encoding.ASCII.GetString(bReceive);
-
-                            //reinicia o timeout, para, por exemplo, quando se está fazendo um upload
-                            readTimeout = 60000;
-                        }
-                        catch { break; }
-                    }
-                }
-                catch (Exception e)
-                {
-                    mySocket.Close();
-                    break;
-                }
-
-                try
-                {
-                    contentStart = 0;
-
-                    //verifica se já recebeu todo o cabeçalho
-                    if (sBuffer.IndexOf("\r\n\r\n") > -1)
-                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\n\r\n"));
-                    else if (sBuffer.IndexOf("\n\n") > -1)
-                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\n\n"));
-                    else if (sBuffer.IndexOf("\r\r") > -1)
-                        strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\r"));
-                    else
-                    {
-
-                        Thread.Sleep(10);
-
-                        continue;
-                    }
-
-
-                    if (strHeader != "")
-                    {
-                        contentStart = sBuffer.IndexOf("\r\n\r\n") + 4;
-                        if (contentStart == 3)
-                            contentStart = sBuffer.IndexOf("\n\n") + 2;
-                        if (contentStart == 1)
-                            contentStart = sBuffer.IndexOf("\r\r") + 2;
-
-                        //verifica se possui o "content-length"
-                        if (strHeader.ToLower().IndexOf("content-length:") > -1)
-                        {
-                            //caso tenha recebido o content-length, verififca se recebeu todo o conteúdo
-                            tempS = strHeader.Substring(sBuffer.ToLower().IndexOf("content-length:"));
-                            tempS = tempS.ToLower();
-                            tempS = tempS.Split('\n')[0];
-                            tempS = tempS.Replace("content-length:", "");
-                            tempS = tempS.Replace(" ", "");
-                            tempS = tempS.Replace("\r", "");
-                            contentLength = Int32.Parse(tempS);
-
-                            
-
-
-                            if ((sBuffer.Length - contentStart) < contentLength)
-                            {
-
-                                Thread.Sleep(10);
-
-                                continue;
-                            }
-                        }
-                        /*else
-                        {
-                            Thread.Sleep(10);
-
-                            continue;
-                        }*/
-
-
-                        //pega a url requisitada
-                        getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
-                        getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
-                        body = "";
-
-                        if (contentStart > 0)
-                            body = sBuffer.Substring(contentStart);
-
-                        method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
-                    }
-                }
-                catch { mySocket.Close(); break; }
-
-                if (getUrl == "")
-                    break; ;
-
-                //pega os dados que são enviados por post
-                //verifica se já possui todo o conteudo
-                if (method != Methods.UNKNOWN)
-                {
-
-                    status = 200;
-
-                    msg = null;
-                    binaryResp = null;
-                    if (this.onClienteDataSend != null)
-                    {
-                        msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket);
-                    }
-
-                    if ((conf_autoSendFiles) && ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html")) && (binaryResp == null) && (msg == null))
-                    {
-                        loadFile(getUrl, out binaryResp, out mime, out status);
-                    }
-
-
-
-                    if (binaryResp == null)
-                    {
-                        if (msg == null)
-                            msg = "";
-
-                        if (onContentReady != null)
-                        {
-                            byte[] temp = onContentReady(method, getUrl, body, "text/html", System.Text.Encoding.Default.GetBytes(msg), mySocket);
-                            if (temp != null)
-                                msg = System.Text.Encoding.Default.GetString(temp);
-                        }
-
-                        if (status == 0)
-                            status = 200;
-
-                        if (mime == "")
-                            mime = "text/html; charset=UTF-8";
-
-                        if (opHeaders != "")
-                            opHeaders = "\r\n" + opHeaders;
-
-                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
-                                                            "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
-                                                            "Content-Type: " + mime + "\r\n" +
-                                                            "Content-Length: " + Convert.ToString(Encoding.UTF8.GetByteCount(msg)) + "\r\n" +
-                                                            "Accept-Ranges: bytes\r\n" +
-                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
-                                                            opHeaders + "\r\n\r\n" + msg;
-
-                        mime = "text/html";
-                        buffer = Encoding.UTF8.GetBytes(dataSend);
-                    }
-                    else
-                    {
-                        if (onContentReady != null)
-                        {
-                            byte[] temp = onContentReady(method, getUrl, body, mime, binaryResp, mySocket);
-                            if (temp != null)
-                                binaryResp = temp;
-                        }
-
-                        /*status = 401;
-                        "WWW-Authenticate:	Basic realm=\"TP-LINK Wireless N Router WR841N\"" +*/
-                        if (opHeaders != "")
-                            opHeaders = "\r\n" + opHeaders;
-
-                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
-                                                            "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
-                                                            "Content-Type: " + mime + "\r\n" +
-                                                            "Content-Length: " + Convert.ToString(binaryResp.Length) + "\r\n" +
-                                                            "Accept-Ranges: bytes\r\n" +
-                                                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
-                                                            opHeaders + "\r\n\r\n";
-
-
-                        //coloca os dados binários no buffer
-                        buffer = new byte[dataSend.Length + binaryResp.Length];
-                        for (cont = 0; cont < dataSend.Length; cont++)
-                            buffer[cont] = Convert.ToByte(dataSend[cont]);
-
-                        for (cont = 0; cont < binaryResp.Length; cont++)
-                            buffer[cont + dataSend.Length] = binaryResp[cont];
-
-
-
-                    }
-
-
-                    if (onReadyToSend != null)
-                    {
-                        byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket);
-                        if (temp != null)
-                            buffer = temp;
+                        mySocket.Close();
+                        return;
                     }
 
                     try
                     {
-                        mySocket.Send(buffer);
+
+                        sslStream.ReadTimeout = 1000;
+                        sslStream.WriteTimeout = 1000;
+                        
+                        sBuffer = ReadMessage(sslStream);
                     }
-                    finally
+                    catch (Exception e)
                     {
-                        try
-                        {
-                            mySocket.Close();
-                        }
-                        catch { }
+                        mySocket.Close();
+                        break;
                     }
 
+                    try
+                    {
+                        contentStart = 0;
+
+                        //verifica se já recebeu todo o cabeçalho
+                        if (sBuffer.IndexOf("\r\n\r\n") > -1)
+                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\n\r\n"));
+                        else if (sBuffer.IndexOf("\n\n") > -1)
+                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\n\n"));
+                        else if (sBuffer.IndexOf("\r\r") > -1)
+                            strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\r\r"));
+                        else
+                        {
+
+                            Thread.Sleep(10);
+
+                            continue;
+                        }
+
+
+                        if (strHeader != "")
+                        {
+                            contentStart = sBuffer.IndexOf("\r\n\r\n") + 4;
+                            if (contentStart == 3)
+                                contentStart = sBuffer.IndexOf("\n\n") + 2;
+                            if (contentStart == 1)
+                                contentStart = sBuffer.IndexOf("\r\r") + 2;
+
+                            //verifica se possui o "content-length"
+                            if (strHeader.ToLower().IndexOf("content-length:") > -1)
+                            {
+                                //caso tenha recebido o content-length, verififca se recebeu todo o conteúdo
+                                tempS = strHeader.Substring(sBuffer.ToLower().IndexOf("content-length:"));
+                                tempS = tempS.ToLower();
+                                tempS = tempS.Split('\n')[0];
+                                tempS = tempS.Replace("content-length:", "");
+                                tempS = tempS.Replace(" ", "");
+                                tempS = tempS.Replace("\r", "");
+                                contentLength = Int32.Parse(tempS);
+
+
+
+
+                                if ((sBuffer.Length - contentStart) < contentLength)
+                                {
+
+                                    Thread.Sleep(10);
+
+                                    continue;
+                                }
+                            }
+
+                            //pega a url requisitada
+                            getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
+                            getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
+                            body = "";
+
+                            if (contentStart > 0)
+                                body = sBuffer.Substring(contentStart);
+
+                            method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
+                        }
+                    }
+                    catch { mySocket.Close(); break; }
+
+                    if (getUrl == "")
+                        break; ;
+
+                    //pega os dados que são enviados por post
+                    //verifica se já possui todo o conteudo
+                    if (method != Methods.UNKNOWN)
+                    {
+
+                        status = 200;
+
+                        msg = null;
+                        binaryResp = null;
+                        if (this.onClienteDataSend != null)
+                        {
+                            msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket.Client);
+                        }
+
+                        if ((conf_autoSendFiles) && ((getUrl.ToLower().IndexOf("file=") > -1) || (getUrl == "/") || (getUrl.ToLower() == "/favicon.ico") || (getUrl.ToLower() == "/index.htm") || (getUrl.ToLower() == "/index.html")) && (binaryResp == null) && (msg == null))
+                        {
+                            loadFile(getUrl, out binaryResp, out mime, out status);
+                        }
+
+
+
+                        if (binaryResp == null)
+                        {
+                            if (msg == null)
+                                msg = "";
+
+                            if (onContentReady != null)
+                            {
+                                byte[] temp = onContentReady(method, getUrl, body, "text/html", System.Text.Encoding.Default.GetBytes(msg), mySocket.Client);
+                                if (temp != null)
+                                    msg = System.Text.Encoding.Default.GetString(temp);
+                            }
+
+                            if (status == 0)
+                                status = 200;
+
+                            if (mime == "")
+                                mime = "text/html; charset=UTF-8";
+
+                            if (opHeaders != "")
+                                opHeaders = "\r\n" + opHeaders;
+
+                            dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
+                                                                "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
+                                                                "Content-Type: " + mime + "\r\n" +
+                                                                "Content-Length: " + Convert.ToString(Encoding.UTF8.GetByteCount(msg)) + "\r\n" +
+                                                                "Accept-Ranges: bytes\r\n" +
+                                                                "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
+                                                                opHeaders + "\r\n\r\n" + msg;
+
+                            mime = "text/html";
+                            buffer = Encoding.UTF8.GetBytes(dataSend);
+                        }
+                        else
+                        {
+                            if (onContentReady != null)
+                            {
+                                byte[] temp = onContentReady(method, getUrl, body, mime, binaryResp, mySocket.Client);
+                                if (temp != null)
+                                    binaryResp = temp;
+                            }
+
+                            /*status = 401;
+                            "WWW-Authenticate:	Basic realm=\"TP-LINK Wireless N Router WR841N\"" +*/
+                            if (opHeaders != "")
+                                opHeaders = "\r\n" + opHeaders;
+
+                            dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
+                                                                "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
+                                                                "Content-Type: " + mime + "\r\n" +
+                                                                "Content-Length: " + Convert.ToString(binaryResp.Length) + "\r\n" +
+                                                                "Accept-Ranges: bytes\r\n" +
+                                                                "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
+                                                                opHeaders + "\r\n\r\n";
+
+
+                            //coloca os dados binários no buffer
+                            buffer = new byte[dataSend.Length + binaryResp.Length];
+                            for (cont = 0; cont < dataSend.Length; cont++)
+                                buffer[cont] = Convert.ToByte(dataSend[cont]);
+
+                            for (cont = 0; cont < binaryResp.Length; cont++)
+                                buffer[cont + dataSend.Length] = binaryResp[cont];
+
+
+
+                        }
+
+
+                        if (onReadyToSend != null)
+                        {
+                            byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket.Client);
+                            if (temp != null)
+                                buffer = temp;
+                        }
+
+                        try
+                        {
+                            sslStream.Write(buffer, 0, buffer.Length);
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                mySocket.Close();
+                            }
+                            catch { }
+                        }
+
+                    }
+                    Thread.Sleep(10);
                 }
-                Thread.Sleep(10);
             }
+            catch (AuthenticationException e)
+            {
+                Console.WriteLine("Exception: {0}", e.Message);
+                if (e.InnerException != null)
+                {
+                    Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                }
+                Console.WriteLine("Authentication failed - closing the connection.");
+                sslStream.Close();
+                mySocket.Close();
+                return;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Exception: {0}", e.Message);
+                if (e.InnerException != null)
+                {
+                    Console.WriteLine("Inner exception: {0}", e.InnerException.Message);
+                }
+                Console.WriteLine("Authentication failed - closing the connection.");
+                sslStream.Close();
+                mySocket.Close();
+                return;
+            }
+
             if (mySocket.Connected)
             {
                 mySocket.Close();
             }
+        }
+
+        private string ReadMessage(Stream sslStream)
+        {
+            // Read the  message sent by the client.
+            // The client signals the end of the message using the
+            // "<EOF>" marker.
+            byte[] buffer = new byte[2048];
+            StringBuilder messageData = new StringBuilder();
+            int bytes = -1;
+            do
+            {
+                try
+                {
+                    // Read the client's test message.
+                    bytes = sslStream.Read(buffer, 0, buffer.Length);
+
+                    // Use Decoder class to convert from bytes to UTF8
+                    // in case a character spans two buffers.
+                    Decoder decoder = Encoding.UTF8.GetDecoder();
+                    char[] chars = new char[decoder.GetCharCount(buffer, 0, bytes)];
+                    decoder.GetChars(buffer, 0, bytes, chars, 0);
+                    messageData.Append(chars);
+                    // Check for EOF or an empty message.
+                    /*if (messageData.ToString().IndexOf("<EOF>") != -1)
+                    {
+                        break;
+                    }*/
+                }
+                catch { break; }
+            } while (bytes != 0);
+
+            return messageData.ToString();
         }
 
         Dictionary<int, string> translates = null;
