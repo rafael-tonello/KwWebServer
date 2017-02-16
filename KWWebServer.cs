@@ -1,10 +1,10 @@
 /*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
-    Versão 3.1, 24/01/2017
+    Versão 3.2, 16/02/2017
   
    changeLog:
-       - Unescape nas URIs
+       - Corrigido o problema com acentuação. O Navegador enviava os dados como UTF8 mas a leitura de dados sem ssl estava com ASCII.
  
   
   Http example
@@ -197,6 +197,7 @@ namespace KW
                             if (Directory.Exists(conf_filesFolder + getUrlCurrent))
                             {
                                 getUrlCurrent = getUrlCurrent + "/index.htm";
+                                mime = "text/html; charset=UTF-8";
                             }
 
 
@@ -212,8 +213,10 @@ namespace KW
                                 mime = "image/jpeg";
                             else if (getUrlCurrent.IndexOf(".png") > -1)
                                 mime = "image/png";
+                            else if (getUrlCurrent.IndexOf(".json") > -1)
+                                mime = "application/json";
                             else if (getUrlCurrent.IndexOf(".js") > -1)
-                                mime = "text/javascript";
+                                mime = "application/javascript";
                             else if (getUrlCurrent.IndexOf(".css") > -1)
                                 mime = "text/css";
                             else
@@ -521,10 +524,11 @@ namespace KW
                     #endregion
                     #region processaConteudo
                     case "processaConteudo":
-                        
 
-                            if ((sBuffer.Length - contentStart) < contentLength)
+                        
+                            if ((Encoding.UTF8.GetByteCount(sBuffer) - contentStart) < contentLength)
                             {
+
 
                                 estado = "lendoDadosConteudo";
                                 continue;
@@ -913,7 +917,7 @@ namespace KW
                             bReceive = new byte[client.Client.Available];
 
                             i = client.Client.Receive(bReceive, client.Client.Available, 0);
-                            sBuffer += Encoding.ASCII.GetString(bReceive);
+                            sBuffer += Encoding.UTF8.GetString(bReceive);
 
                             //reinicia o timeout, para, por exemplo, quando se está fazendo um upload
                         }
