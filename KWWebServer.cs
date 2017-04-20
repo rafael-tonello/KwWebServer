@@ -219,6 +219,8 @@ namespace KW
                                 mime = "application/javascript";
                             else if (getUrlCurrent.IndexOf(".css") > -1)
                                 mime = "text/css";
+							else if (getUrlCurrent.IndexOf(".xml") > -1)
+                                mime = "application/xml";
                             else
                                 mime = "text/html; charset=UTF-8";// "text/html";
 
