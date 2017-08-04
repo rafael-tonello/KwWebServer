@@ -1,4 +1,4 @@
-/*
+﻿/*
     Kiwiisco embeded webserver
     By: Refael Tonello (tonello.rafinha@gmail.com)
     Versão 3.2, 16/02/2017
@@ -89,7 +89,7 @@ namespace KW
         List<Stream> webSocketStreams = new List<Stream>();
 
         public delegate byte[] OnReadyToSendDelegate(string method, string getUrl, string body, string mimeType, byte[] buffer, Socket tcpClient);
-        
+
 
         //retornar null para evitar processamento excessivo (executado antes de receber o cabeçalho)
         public OnReadyToSendDelegate onContentReady;
@@ -100,7 +100,7 @@ namespace KW
 
 
 
-        public KWHttpServer(int port, bool pconf_autoSendFiles, List<string>conf_autoSendFiles_fodler, bool use_multiThreads = true, bool useKeepAliveConnection = false)
+        public KWHttpServer(int port, bool pconf_autoSendFiles, List<string> conf_autoSendFiles_fodler, bool use_multiThreads = true, bool useKeepAliveConnection = false)
         {
             this.conf_multiThread = use_multiThreads;
             this.conf_autoSendFiles = pconf_autoSendFiles;
@@ -166,14 +166,14 @@ namespace KW
             if (getUrl.IndexOf('?') > -1)
                 getUrl = getUrl.Split('?')[0];
 
-            
+
 
             binaryResp = null;
             try
             {
                 httpStatus = 200;
 
-                int cont = 0; 
+                int cont = 0;
                 while ((binaryResp == null) && (cont < conf_filesFolders.Count))
                 {
                     var conf_filesFolder = conf_filesFolders[cont];
@@ -219,8 +219,6 @@ namespace KW
                                 mime = "application/javascript";
                             else if (getUrlCurrent.IndexOf(".css") > -1)
                                 mime = "text/css";
-							else if (getUrlCurrent.IndexOf(".xml") > -1)
-                                mime = "application/xml";
                             else
                                 mime = "text/html; charset=UTF-8";// "text/html";
 
@@ -291,7 +289,7 @@ namespace KW
             {
                 myListener.Stop();
             }
-            
+
             myListener = null;
             th.Interrupt();
         }
@@ -313,7 +311,7 @@ namespace KW
                 if (acceptOk)
                 {
                     acceptOk = false;
-                    myListener.BeginAcceptTcpClient(delegate(IAsyncResult ar)
+                    myListener.BeginAcceptTcpClient(delegate (IAsyncResult ar)
                     {
                         acceptOk = true;
                         TcpListener listener = (TcpListener)ar.AsyncState;
@@ -322,9 +320,13 @@ namespace KW
                             TcpClient client = listener.EndAcceptTcpClient(ar);
 
                             //escutaCliente(client, 0);
-                            Thread temp = new Thread(delegate() { escutaCliente(client, 0); });
+                            Thread temp = new Thread(delegate (object threadPointer) { escutaCliente(client, 0, (Thread)threadPointer); });
                             threads.Add(temp);
-                            temp.Start();
+                            temp.Start(temp);
+
+                            //listener = null;
+                            //client = null;
+                            //temp = null;
                         }
 
 
@@ -332,14 +334,14 @@ namespace KW
                 }
 
 
-                Thread.Sleep(10);
+                Thread.Sleep(1);
             }
             return;
         }
 
-        public void escutaCliente(TcpClient mySocket, int threadIndex)
+        public void escutaCliente(TcpClient mySocket, int threadIndex, Thread threadPointer)
         {
-            
+
             string dataSend = "";
             string getUrl = "";
             string msg = "";
@@ -354,22 +356,22 @@ namespace KW
             string estado;
 
             string[] headersArrTemp;
-            
+
             byte[] buffer = null;
             byte[] binaryResp = null;
             Byte[] bReceive;// = new Byte[1024];
             byte[] tempBuf;
-            
+
             int contentLength = 0;
             int contentStart = 0;
             int cont;
             int status = 200;
             int readTimeout = 10000;
-            
-            Dictionary<string, string> headers = new Dictionary<string,string>();
+
+            Dictionary<string, string> headers = new Dictionary<string, string>();
 
             Stream sslStream = null;
-            
+
             mySocket.ReceiveTimeout = 2500;
 
             if (useHttps)
@@ -396,7 +398,7 @@ namespace KW
 
             while ((rodando) && (mySocket != null) && (mySocket.Client != null) && (mySocket.Client.Connected))
             {
-                switch(estado)
+                switch (estado)
                 {
                     #region identificandoHttps
                     case "identificandoHttps":
@@ -404,10 +406,10 @@ namespace KW
                         {
                             if (useHttps)
                             {
-                                ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls | SslProtocols.Tls| SslProtocols.Ssl2 | SslProtocols.Ssl3, true);
+                                ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls | SslProtocols.Tls | SslProtocols.Ssl2 | SslProtocols.Ssl3, true);
                             }
                         }
-                        catch{}
+                        catch { }
                         estado = "lerDadosCabecalho";
                         break;
                     #endregion
@@ -417,27 +419,27 @@ namespace KW
 
                         readTimeout = 1000;
                         sBuffer = "";
-                        System.Threading.Thread.Sleep(10);
+                        System.Threading.Thread.Sleep(1);
                         if (estado == "lerDadosCabecalho")
                             estado = "lendoDadosCabecalho";
-                        else 
+                        else
                             estado = "lendoDadosConteudo";
                         break;
                     #endregion
                     #region lendoDadosConteudo, lendoDadosCabecalho
                     case "lendoDadosConteudo":
                     case "lendoDadosCabecalho":
-                        System.Threading.Thread.Sleep(10);    
+                        System.Threading.Thread.Sleep(1);
                         readTimeout -= 10;
-                         //verifica se deu timeout
+                        //verifica se deu timeout
                         if (readTimeout < 0)
                         {
                             estado = "erroTimeout";
                             continue;
                         }
-   
-                        
-                        
+
+
+
                         sslStream.ReadTimeout = 100;
                         sslStream.WriteTimeout = 100;
 
@@ -451,7 +453,7 @@ namespace KW
 
                         sBuffer += novosDados;
 
-                       
+
                         //verifica se já veio algo
 
                         if (estado == "lendoDadosCabecalho")
@@ -472,7 +474,7 @@ namespace KW
                             strHeader = sBuffer.Substring(0, sBuffer.IndexOf("\n\n"));
                         else
                         {
-                            
+
                             //continua lendo dados
                             estado = "lendoDadosCabecalho";
                             continue;
@@ -487,7 +489,7 @@ namespace KW
                         headers.Clear();
                         strHeader = strHeader.Replace("\r", "");
                         headersArrTemp = strHeader.Split('\n');
-                        foreach(var att in headersArrTemp)
+                        foreach (var att in headersArrTemp)
                         {
                             if (att.IndexOf(':') > -1)
                             {
@@ -496,7 +498,7 @@ namespace KW
                                     headers[headers.Last().Key] = headers.Last().Value.Substring(1);
                             }
                         }
-                            
+
 
                         getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
                         getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
@@ -512,7 +514,7 @@ namespace KW
                             continue;
                         }
 
-                            
+
                         //verifica se possui o "content-length"
                         if (headers.ContainsKey("content-length"))
                         {
@@ -527,18 +529,18 @@ namespace KW
                     #region processaConteudo
                     case "processaConteudo":
 
-                        
-                            if ((Encoding.UTF8.GetByteCount(sBuffer) - contentStart) < contentLength)
-                            {
+
+                        if ((Encoding.UTF8.GetByteCount(sBuffer) - contentStart) < contentLength)
+                        {
 
 
-                                estado = "lendoDadosConteudo";
-                                continue;
-                            }
-                            //pega a url requisitada
-                            body = sBuffer.Substring(contentStart);
+                            estado = "lendoDadosConteudo";
+                            continue;
+                        }
+                        //pega a url requisitada
+                        body = sBuffer.Substring(contentStart);
 
-                            estado = "processaRequisicao_levantamentoDeDados";
+                        estado = "processaRequisicao_levantamentoDeDados";
                         break;
                     #endregion
                     #region processaRequisicao, processaRequisicao_levantamentoDeDados
@@ -605,12 +607,12 @@ namespace KW
                         dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
                                                         "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
                                                         "Content-Type: " + mime + "\r\n" +
-                                                        "Content-Length: " + (binaryResp == null? Convert.ToString(Encoding.UTF8.GetByteCount(msg)) : binaryResp.Length.ToString()) + "\r\n" +
+                                                        "Content-Length: " + (binaryResp == null ? Convert.ToString(Encoding.UTF8.GetByteCount(msg)) : binaryResp.Length.ToString()) + "\r\n" +
                                                         "Accept-Ranges: bytes\r\n" +
                                                         "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
                                                         opHeaders + "\r\n\r\n" + msg;
 
-                        
+
                         if (binaryResp == null)
                             buffer = Encoding.UTF8.GetBytes(dataSend);
                         else
@@ -623,7 +625,7 @@ namespace KW
                             for (cont = 0; cont < binaryResp.Length; cont++)
                                 buffer[cont + dataSend.Length] = binaryResp[cont];
                         }
-                        
+
                         estado = "enviarResposta";
                         break;
                     #endregion
@@ -642,7 +644,7 @@ namespace KW
                         {
                             sslStream.Write(buffer, 0, buffer.Length);
                         }
-                        catch{}
+                        catch { }
                         estado = "finalizaRequisicao";
                         break;
                     #endregion
@@ -674,7 +676,7 @@ namespace KW
                     #endregion
                     #region lerDadosWebSocks
                     case "lerDadosWebSocks":
-                        
+
                         Byte[] encoded = ReadMessageBytes(sslStream, mySocket);
                         byte[] decoded;
                         byte[] resultRawData;
@@ -696,7 +698,7 @@ namespace KW
                             }
                         }
                         else
-                            Thread.Sleep(10); //só aguarda caso não venha nada
+                            Thread.Sleep(1); //só aguarda caso não venha nada
 
                         break;
                     #endregion
@@ -728,14 +730,28 @@ namespace KW
                             mySocket.Close();
                             sslStream.Close();
                             sslStream.Dispose();
-                            buffer = new byte[0];
-                            binaryResp = new byte[0];
-                            tempBuf = new byte[0];
-                            bReceive = new byte[0];
+                            buffer = null;
+                            binaryResp = null;
+                            tempBuf = null;
+                            bReceive = null;
+                            dataSend = null;
+                            getUrl = null;
+                            msg = null;
+                            mime = null;
+                            opHeaders = null;
+                            sBuffer = null;
+                            body = null;
+                            method = null;
+                            webSocketKey = null;
+                            strHeader = null;
+                            novosDados = null;
+                            estado = null;
+
+                            threads.Remove(threadPointer);
                         }
                         catch { }
                         break;
-                    #endregion
+                        #endregion
                 }
             }
 
@@ -749,6 +765,23 @@ namespace KW
                 }
             }
             catch { }
+
+            buffer = null;
+            binaryResp = null;
+            tempBuf = null;
+            bReceive = null;
+            dataSend = null;
+            getUrl = null;
+            msg = null;
+            mime = null;
+            opHeaders = null;
+            sBuffer = null;
+            body = null;
+            method = null;
+            webSocketKey = null;
+            strHeader = null;
+            novosDados = null;
+            estado = null;
         }
 
         public static string GetWebSocketDecodedData(byte[] buffer, int length, out byte[] rawDecodedData)
@@ -844,7 +877,7 @@ namespace KW
                 catch { }
             else
             {
-                for (int cont = 0; cont <webSocketStreams.Count; cont++)
+                for (int cont = 0; cont < webSocketStreams.Count; cont++)
                 {
                     var att = webSocketStreams[cont];
                     try
@@ -900,8 +933,9 @@ namespace KW
                     }
                     catch { break; }
                 } while (bytes != 0);
-
-                return messageData.ToString();
+                string ret = messageData.ToString();
+                messageData.Clear();
+                return ret;
             }
             else
             {
@@ -926,6 +960,8 @@ namespace KW
                         catch { break; }
                     }
 
+
+                    bReceive = new byte[] { };
                     return sBuffer;
                 }
                 catch
@@ -942,7 +978,7 @@ namespace KW
             // Read the  message sent by the client.
             // The client signals the end of the message using the
             // "<EOF>" marker.
-            List<byte> retorno = new List<byte>();;
+            List<byte> retorno = new List<byte>();
             if (useHttps)
             {
                 byte[] buffer = new byte[2048];
@@ -964,7 +1000,7 @@ namespace KW
             }
             else
             {
-                byte[] bReceive = new byte[]{};// = new Byte[1024];
+                byte[] bReceive = new byte[] { };// = new Byte[1024];
                 try
                 {
 
@@ -977,7 +1013,7 @@ namespace KW
                             bReceive = new byte[client.Client.Available];
 
                             i = client.Client.Receive(bReceive, client.Client.Available, 0);
-                            
+
 
                             //reinicia o timeout, para, por exemplo, quando se está fazendo um upload
                         }
@@ -988,7 +1024,7 @@ namespace KW
                 }
                 catch
                 {
-                    return new byte[]{};
+                    return new byte[] { };
                 }
 
 
