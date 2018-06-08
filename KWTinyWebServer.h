@@ -12,8 +12,8 @@
 #include <string>
 #include <list>
 #include <vector>
-#include "StringUtils.h"
-#include "SysLink.h"
+#include "../StringUtils.h"
+#include "../SysLink.h"
 #include <fcntl.h>
 #include <iostream>
 #include <stdio.h>
