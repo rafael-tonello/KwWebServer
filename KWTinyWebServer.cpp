@@ -374,20 +374,15 @@ namespace Shared{
                     //clear data
                     delete[] tempIndStrConvert; tempIndStrConvert = NULL;
 
-                    if ((receivedData.contentBody) && (receivedData.contentLength > 0))
-                    {
-                        delete[] receivedData.contentBody; receivedData.contentBody = NULL;
-                    }
-
                     if ((dataToSend.contentBody) && (dataToSend.contentLength > 0))
                     {
 
-                        delete[] dataToSend.contentBody;dataToSend.contentBody = NULL;
+                        delete[] dataToSend.contentBody;
+                        dataToSend.contentBody = NULL;
                     }
                     state = FINISH_REQUEST;
                     break;
                 case FINISH_REQUEST:
-                    close(client);
                     state = FINISHED;
                     break;
                 case ERROR_500_INTERNALSERVERERROR:
@@ -434,6 +429,7 @@ namespace Shared{
         strUtils.~StringUtils();
         //delete &strUtils;
         //pthread_join(*thTalkWithClient, NULL);
+
         pthread_detach(*thTalkWithClient);
         pthread_exit(0);
     }
