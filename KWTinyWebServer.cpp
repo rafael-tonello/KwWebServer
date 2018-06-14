@@ -139,7 +139,7 @@ namespace Shared{
         dataToSend.httpStatus = 200;
 
 
-        cout << "Bom, alguem se conecout" << endl << flush;
+        //cout << "Bom, alguem se conecout" << endl << flush;
 
         int startTimeout = 2000;
 
@@ -392,13 +392,13 @@ namespace Shared{
                     break;
                 case ERROR_500_INTERNALSERVERERROR:
                     close(client);
-                    cout << "Saiu com erro interno" << endl << flush;
+                    //cout << "Saiu com erro interno" << endl << flush;
                     state = FINISHED;
                     break;
             }
 
         }
-    cout << "Blz, a conexão já eras " << endl << flush;
+    //cout << "Blz, a conexão já eras " << endl << flush;
         close(client);
 
         //headerLines.clear();
