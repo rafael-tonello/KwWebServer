@@ -31,15 +31,23 @@
 namespace Shared{
     using namespace std;
 
-    struct HttpData{
-        string resource;
-        string method;
-        string contentType;
-        char* contentBody = NULL;
-        unsigned int contentLength = 0;
-        vector< vector<string> > headers;
-        unsigned int httpStatus;
-        string httpErrorMessage;
+    class HttpData{
+        public:
+            string resource;
+            string method;
+            string contentType;
+            char* contentBody = NULL;
+            unsigned int contentLength = 0;
+            vector< vector<string> > headers;
+            unsigned int httpStatus;
+            string httpErrorMessage;
+
+            void setContentString(string data)
+            {
+                this->contentBody = new char[data.size()];
+                for (int cont = 0; cont < data.size(); cont++)
+                    this->contentBody[cont] = data[cont];
+            }
     };
 
     //typedef void (*OnClientDataSend)(HttpData* in, HttpData* out);
