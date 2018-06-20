@@ -68,8 +68,8 @@ namespace KW
 
         };
         public delegate string onDataEvent(String method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, Socket tcpClient);
-        public delegate string OnWebSocketData(object wsId, string stringData, byte[] rawData, out byte[] opRawReturn);
-        public delegate void OnWebSocketConnectedDisconnected(object wsId);
+        public delegate string OnWebSocketData(string resource, object wsId, string stringData, byte[] rawData, out byte[] opRawReturn);
+        public delegate void OnWebSocketConnectedDisconnected(string resource, object wsId);
 
         public event onDataEvent onClienteDataSend;
         public event OnWebSocketData onWebSocketData;
@@ -77,16 +77,17 @@ namespace KW
         public event OnWebSocketConnectedDisconnected onWebSocketConnected;
         public event OnWebSocketConnectedDisconnected onWebSocketDisconnected;
 
-
-        private TcpListener myListener;
+        
         private bool conf_autoSendFiles;
         public List<string> conf_filesFolders = new List<string>();
         private bool conf_multiThread = true;
         private bool conf_keepAlive = false;
         private bool rodando;
-        private Thread th;
+        private List<Thread> ths = new List<Thread>();
 
         List<Stream> webSocketStreams = new List<Stream>();
+
+        List<TcpListener> listeners = new List<TcpListener>();
 
         public delegate byte[] OnReadyToSendDelegate(string method, string getUrl, string body, string mimeType, byte[] buffer, Socket tcpClient);
 
@@ -100,7 +101,7 @@ namespace KW
 
 
 
-        public KWHttpServer(int port, bool pconf_autoSendFiles, List<string> conf_autoSendFiles_fodler, bool use_multiThreads = true, bool useKeepAliveConnection = false)
+        public KWHttpServer(int[] ports, bool pconf_autoSendFiles, List<string> conf_autoSendFiles_fodler, bool use_multiThreads = true, bool useKeepAliveConnection = false)
         {
             this.conf_multiThread = use_multiThreads;
             this.conf_autoSendFiles = pconf_autoSendFiles;
@@ -118,12 +119,18 @@ namespace KW
 
 
                 //start listing on the given port
-                myListener = new TcpListener(IPAddress.Any, port);
-                myListener.Start();
+                foreach (var c in ports)
+                {
+                    listeners.Add(new TcpListener(IPAddress.Any, c));
+                    listeners.Last().Start();
 
-                //start the thread which calls the method 'StartListen'
-                th = new Thread(new ThreadStart(StartListen));
-                th.Start();
+                    //start the thread which calls the method 'StartListen'
+                    ths.Add(new Thread(delegate (object args)
+                    {
+                        StartListen((TcpListener)args);
+                    }));
+                    ths.Last().Start(listeners.Last());
+                }
 
             }
             catch
@@ -136,7 +143,7 @@ namespace KW
         {
             try
             {
-                serverCertificate = new X509Certificate(pfxCert, pfxPass);//@"C:\Users\engenharia4\Desktop\https\dinv001.pfx", "inovadaq");//X509Certificate2.CreateFromCertFile(@"C:\Users\engenharia4\Desktop\https\server.pfx", "inovadaq");
+                serverCertificate = new X509Certificate2(pfxCert, pfxPass);//@"C:\Users\engenharia4\Desktop\https\dinv001.pfx", "inovadaq");//X509Certificate2.CreateFromCertFile(@"C:\Users\engenharia4\Desktop\https\server.pfx", "inovadaq");
                 useHttps = true;
             }
             catch { useHttps = false; }
@@ -182,7 +189,11 @@ namespace KW
                     if (getUrlCurrent == "/")
                     {
                         mime = "text/html; charset=UTF-8";
-                        binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.htm");
+                        if (File.Exists(conf_filesFolder + "index.htm"))
+                            binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.htm");
+                        else
+                            if (File.Exists(conf_filesFolder + "index.html"))
+                            binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.html");
                     }
                     else
                     {
@@ -285,18 +296,21 @@ namespace KW
             rodando = false;
 
             System.Threading.Thread.Sleep(100);
-            if (myListener != null)
+            foreach (var c in this.listeners)
             {
-                myListener.Stop();
+                if (c != null)
+                {
+                    c.Stop();
+                }
             }
 
-            myListener = null;
-            th.Interrupt();
+            foreach (var c in ths)
+                c.Interrupt();
         }
 
         List<Thread> threads = new List<Thread>();
 
-        private void StartListen()
+        private void StartListen(TcpListener listener)
         {
             rodando = true;
 
@@ -304,20 +318,20 @@ namespace KW
             while (rodando)
             {
                 //Accept a new connection
-                if (myListener == null)
+                if (listener == null)
                     break;
 
 
                 if (acceptOk)
                 {
                     acceptOk = false;
-                    myListener.BeginAcceptTcpClient(delegate (IAsyncResult ar)
+                    listener.BeginAcceptTcpClient(delegate (IAsyncResult ar)
                     {
                         acceptOk = true;
-                        TcpListener listener = (TcpListener)ar.AsyncState;
+                        TcpListener listener2 = (TcpListener)ar.AsyncState;
                         if (rodando)
                         {
-                            TcpClient client = listener.EndAcceptTcpClient(ar);
+                            TcpClient client = listener2.EndAcceptTcpClient(ar);
 
                             //escutaCliente(client, 0);
                             Thread temp = new Thread(delegate (object threadPointer) { escutaCliente(client, 0, (Thread)threadPointer); });
@@ -330,7 +344,7 @@ namespace KW
                         }
 
 
-                    }, myListener);
+                    }, listener);
                 }
 
 
@@ -406,10 +420,10 @@ namespace KW
                         {
                             if (useHttps)
                             {
-                                ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls | SslProtocols.Tls | SslProtocols.Ssl2 | SslProtocols.Ssl3, true);
+                                ((SslStream)sslStream).AuthenticateAsServer(serverCertificate, false, SslProtocols.Tls | SslProtocols.Tls | SslProtocols.Ssl3 | SslProtocols.Ssl3, true);
                             }
                         }
-                        catch { }
+                        catch (Exception e) { estado = e.Message; }
                         estado = "lerDadosCabecalho";
                         break;
                     #endregion
@@ -556,6 +570,13 @@ namespace KW
                             if (this.onClienteDataSend != null)
                             {
                                 msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket.Client);
+                                if (msg == null)
+                                {
+                                    binaryResp = null;
+                                    mime = null;
+                                    status = 200;
+                                    opHeaders = null;
+                                }
                             }
 
                             if ((conf_autoSendFiles) && (isValidFileRequest(getUrl)) && (binaryResp == null) && (msg == null))
@@ -601,7 +622,7 @@ namespace KW
                         if (mime == "")
                             mime = "text/html; charset=UTF-8";
 
-                        if (opHeaders != "")
+                        if ((opHeaders != "") && (opHeaders != null))
                             opHeaders = "\r\n" + opHeaders;
 
                         dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
@@ -669,7 +690,7 @@ namespace KW
 
                         webSocketStreams.Add(sslStream);
                         if (onWebSocketConnected != null)
-                            onWebSocketConnected(sslStream);
+                            onWebSocketConnected(getUrl, sslStream);
 
                         estado = "lerDadosWebSocks";
                         break;
@@ -686,7 +707,7 @@ namespace KW
 
                             if (onWebSocketData != null)
                             {
-                                msg = onWebSocketData(sslStream, novosDados, decoded, out resultRawData);
+                                msg = onWebSocketData(getUrl, sslStream, novosDados, decoded, out resultRawData);
                                 if ((msg != null) && (msg != ""))
                                 {
                                     sendWebSocketData(sslStream, msg);
@@ -720,7 +741,7 @@ namespace KW
                             {
                                 webSocketStreams.Remove(sslStream);
                                 if (onWebSocketDisconnected != null)
-                                    onWebSocketDisconnected(sslStream);
+                                    onWebSocketDisconnected(getUrl, sslStream);
                             }
                         }
                         catch { }
@@ -761,7 +782,7 @@ namespace KW
                 {
                     webSocketStreams.Remove(sslStream);
                     if (onWebSocketDisconnected != null)
-                        onWebSocketDisconnected(sslStream);
+                        onWebSocketDisconnected(getUrl, sslStream);
                 }
             }
             catch { }
@@ -837,7 +858,7 @@ namespace KW
         /// </summary>
         /// <param name="webSocketStream">TR: O Stream do web socket (wsId passado no evento onWebSocketData). Se for null, a mensagem é enviada por broadcast (para todos os websockets conectados).(</param>
         /// <param name="data">Os dados a serem enviados</param>
-        public void sendWebSocketData(object webSocketStream, byte[] data)
+        public bool sendWebSocketData(object webSocketStream, byte[] data)
         {
 
             List<byte> lb = new List<byte>();
@@ -874,20 +895,28 @@ namespace KW
                 {
                     ((Stream)webSocketStream).Write(lb.ToArray(), 0, lb.Count());
                 }
-                catch { }
+                catch { return false; }
             else
             {
+                int sucess = 0;
                 for (int cont = 0; cont < webSocketStreams.Count; cont++)
                 {
                     var att = webSocketStreams[cont];
                     try
                     {
                         att.Write(lb.ToArray(), 0, lb.Count());
+                        sucess++;
                     }
                     catch { }
                 }
 
+
+                //if aniony not respondi, return false
+                if (sucess == 0)
+                    return false;
             }
+
+            return true;
         }
 
         /// <summary>
