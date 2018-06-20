@@ -121,8 +121,6 @@ namespace Shared{
         string headerSpliter = "";
         States state = AWAIT_HEADER;
 
-
-
         unsigned long headerEnd = 0;
 
         StringUtils strUtils;
@@ -134,12 +132,8 @@ namespace Shared{
         int contentStart;
         string temp;
 
-
         receivedData.httpStatus = 200;
         dataToSend.httpStatus = 200;
-
-
-        cout << "Bom, alguem se conecout" << endl << flush;
 
         int startTimeout = 2000;
 
@@ -374,31 +368,24 @@ namespace Shared{
                     //clear data
                     delete[] tempIndStrConvert; tempIndStrConvert = NULL;
 
-                    if ((receivedData.contentBody) && (receivedData.contentLength > 0))
-                    {
-                        delete[] receivedData.contentBody; receivedData.contentBody = NULL;
-                    }
-
                     if ((dataToSend.contentBody) && (dataToSend.contentLength > 0))
                     {
 
-                        delete[] dataToSend.contentBody;dataToSend.contentBody = NULL;
+                        delete[] dataToSend.contentBody;
+                        dataToSend.contentBody = NULL;
                     }
                     state = FINISH_REQUEST;
                     break;
                 case FINISH_REQUEST:
-                    close(client);
                     state = FINISHED;
                     break;
                 case ERROR_500_INTERNALSERVERERROR:
                     close(client);
-                    cout << "Saiu com erro interno" << endl << flush;
                     state = FINISHED;
                     break;
             }
 
         }
-    cout << "Blz, a conexão já eras " << endl << flush;
         close(client);
 
         //headerLines.clear();
@@ -434,6 +421,7 @@ namespace Shared{
         strUtils.~StringUtils();
         //delete &strUtils;
         //pthread_join(*thTalkWithClient, NULL);
+
         pthread_detach(*thTalkWithClient);
         pthread_exit(0);
     }
