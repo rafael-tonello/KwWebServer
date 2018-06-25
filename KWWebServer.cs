@@ -1,41 +1,4 @@
-﻿/*
-    Kiwiisco embeded webserver
-    By: Refael Tonello (tonello.rafinha@gmail.com)
-    Versão 3.2, 16/02/2017
-  
-   changeLog:
-       - Corrigido o problema com acentuação. O Navegador enviava os dados como UTF8 mas a leitura de dados sem ssl estava com ASCII.
- 
-  
-  Http example
-           KW.KWHttpServer temp = new KW.KWHttpServer(80, false);
-            temp.onClienteDataSend += delegate(string method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, System.Net.Sockets.Socket tcpClient)
-            {
-                opBinary = null;
-                opMime = "";
-                opHttpStatus = 200;
-                opHeaders = "";
-
-
-                return "lol, sem https";
-            };
-  
-  Https example
-           KW.KWHttpServer temp = new KW.KWHttpServer(443, false);
-            temp.enableHttps(@"C:\Users\engenharia4\Desktop\https\dinv001.pfx", "inovadaq");
-            temp.onClienteDataSend += delegate(string method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, System.Net.Sockets.Socket tcpClient)
-            {
-                opBinary = null;
-                opMime = "";
-                opHttpStatus = 200;
-                opHeaders = "";
-
-
-                return "lol, com https";
-            };
- 
- */
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -52,6 +15,35 @@ using System.Text.RegularExpressions;
 namespace KW
 {
 
+    public class HttpSessionData: IDisposable
+    {
+        public string method = "GET";
+        public string resource = "";
+        public Dictionary<string, string> headers = new Dictionary<string, string>();
+        public byte[] body = new byte[0];
+        public string mime = "";
+        public int httpStatus = 200;
+        public Socket tcpClient;
+
+        public string sBody
+        {
+            get{ return Encoding.UTF8.GetString(this.body); }
+            set { this.body = Encoding.UTF8.GetBytes(value);  }
+
+        }
+
+        public void Dispose()
+        {
+            method = "";
+            resource = "";
+            headers?.Clear();
+            headers = null;
+            body = new byte[0];
+            mime = "";
+            tcpClient = null;
+        }
+    }
+
     public class KWHttpServer
     {
         X509Certificate serverCertificate = null;
@@ -67,7 +59,7 @@ namespace KW
 
 
         };
-        public delegate string onDataEvent(String method, string getUrl, string headerStr, string body, out byte[] opBinary, out string opMime, out int opHttpStatus, out string opHeaders, Socket tcpClient);
+        public delegate HttpSessionData onDataEvent(HttpSessionData data);
         public delegate string OnWebSocketData(string resource, object wsId, string stringData, byte[] rawData, out byte[] opRawReturn);
         public delegate void OnWebSocketConnectedDisconnected(string resource, object wsId);
 
@@ -77,11 +69,12 @@ namespace KW
         public event OnWebSocketConnectedDisconnected onWebSocketConnected;
         public event OnWebSocketConnectedDisconnected onWebSocketDisconnected;
 
-        
+
         private bool conf_autoSendFiles;
         public List<string> conf_filesFolders = new List<string>();
         private bool conf_multiThread = true;
         private bool conf_keepAlive = false;
+        private string conf_defaultCharSet = "UTF-8";
         private bool rodando;
         private List<Thread> ths = new List<Thread>();
 
@@ -89,7 +82,7 @@ namespace KW
 
         List<TcpListener> listeners = new List<TcpListener>();
 
-        public delegate byte[] OnReadyToSendDelegate(string method, string getUrl, string body, string mimeType, byte[] buffer, Socket tcpClient);
+        public delegate void OnReadyToSendDelegate(ref HttpSessionData output);
 
 
         //retornar null para evitar processamento excessivo (executado antes de receber o cabeçalho)
@@ -101,8 +94,9 @@ namespace KW
 
 
 
-        public KWHttpServer(int[] ports, bool pconf_autoSendFiles, List<string> conf_autoSendFiles_fodler, bool use_multiThreads = true, bool useKeepAliveConnection = false)
+        public KWHttpServer(int[] ports, bool pconf_autoSendFiles, List<string> conf_autoSendFiles_fodler, bool use_multiThreads = true, string defaultCharSet = "UTF-8", bool useKeepAliveConnection = false)
         {
+            this.conf_defaultCharSet = defaultCharSet;
             this.conf_multiThread = use_multiThreads;
             this.conf_autoSendFiles = pconf_autoSendFiles;
             this.conf_filesFolders = conf_autoSendFiles_fodler;
@@ -169,7 +163,7 @@ namespace KW
                 return;
             }
 
-            mime = "text/html";
+            mime = "text/html" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : "");
             if (getUrl.IndexOf('?') > -1)
                 getUrl = getUrl.Split('?')[0];
 
@@ -188,7 +182,7 @@ namespace KW
                     string currentFIlename = "";
                     if (getUrlCurrent == "/")
                     {
-                        mime = "text/html; charset=UTF-8";
+                        mime = "text/html" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : ""); ;
                         if (File.Exists(conf_filesFolder + "index.htm"))
                             binaryResp = System.IO.File.ReadAllBytes(conf_filesFolder + "index.htm");
                         else
@@ -208,7 +202,7 @@ namespace KW
                             if (Directory.Exists(conf_filesFolder + getUrlCurrent))
                             {
                                 getUrlCurrent = getUrlCurrent + "/index.htm";
-                                mime = "text/html; charset=UTF-8";
+                                mime = "text/html" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : ""); ;
                             }
 
 
@@ -225,13 +219,13 @@ namespace KW
                             else if (getUrlCurrent.IndexOf(".png") > -1)
                                 mime = "image/png";
                             else if (getUrlCurrent.IndexOf(".json") > -1)
-                                mime = "application/json";
+                                mime = "application/json" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : "");
                             else if (getUrlCurrent.IndexOf(".js") > -1)
                                 mime = "application/javascript";
                             else if (getUrlCurrent.IndexOf(".css") > -1)
                                 mime = "text/css";
                             else
-                                mime = "text/html; charset=UTF-8";// "text/html";
+                                mime = "text/html;" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : ""); ;// "text/html";
 
                             binaryResp = System.IO.File.ReadAllBytes(currentFIlename);
                         }
@@ -356,14 +350,16 @@ namespace KW
         public void escutaCliente(TcpClient mySocket, int threadIndex, Thread threadPointer)
         {
 
+            HttpSessionData input = new HttpSessionData();
+            HttpSessionData output = new HttpSessionData
+            {
+                httpStatus = 200,
+                sBody = "",
+                mime = "text/html" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : "")
+        };
+
             string dataSend = "";
-            string getUrl = "";
-            string msg = "";
-            string mime = "";
-            string opHeaders = "";
             string sBuffer = "";
-            string body = "";
-            string method = Methods.UNKNOWN;
             string webSocketKey = "";
             string strHeader = "";
             string novosDados;
@@ -372,9 +368,6 @@ namespace KW
             string[] headersArrTemp;
 
             byte[] buffer = null;
-            byte[] binaryResp = null;
-            Byte[] bReceive;// = new Byte[1024];
-            byte[] tempBuf;
 
             int contentLength = 0;
             int contentStart = 0;
@@ -514,11 +507,11 @@ namespace KW
                         }
 
 
-                        getUrl = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
-                        getUrl = getUrl.Substring(0, getUrl.ToUpper().IndexOf(" HTTP"));
-                        getUrl = System.Uri.UnescapeDataString(getUrl);
+                        input.resource = sBuffer.Substring(sBuffer.IndexOf(' ') + 1);// + 1, sBuffer.IndexOf('\n') - sBuffer.ToUpper().IndexOf(" HTTP"));
+                        input.resource = input.resource.Substring(0, input.resource.ToUpper().IndexOf(" HTTP"));
+                        input.resource = System.Uri.UnescapeDataString(input.resource);
 
-                        method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
+                        input.method = sBuffer.Substring(0, sBuffer.IndexOf(' ')).ToUpper();
 
                         //identifica uma conexão websocks
                         if (headers.ContainsKey("sec-websocket-key"))
@@ -552,7 +545,7 @@ namespace KW
                             continue;
                         }
                         //pega a url requisitada
-                        body = sBuffer.Substring(contentStart);
+                        input.sBody = sBuffer.Substring(contentStart);
 
                         estado = "processaRequisicao_levantamentoDeDados";
                         break;
@@ -560,28 +553,19 @@ namespace KW
                     #region processaRequisicao, processaRequisicao_levantamentoDeDados
                     case "processaRequisicao":
                     case "processaRequisicao_levantamentoDeDados":
-                        if (method != Methods.UNKNOWN)
+                        if (input.method != Methods.UNKNOWN)
                         {
 
                             status = 200;
-
-                            msg = null;
-                            binaryResp = null;
+                            
                             if (this.onClienteDataSend != null)
                             {
-                                msg = this.onClienteDataSend(method, getUrl, strHeader, body, out binaryResp, out mime, out status, out opHeaders, mySocket.Client);
-                                if (msg == null)
-                                {
-                                    binaryResp = null;
-                                    mime = null;
-                                    status = 200;
-                                    opHeaders = null;
-                                }
+                                output = this.onClienteDataSend(input);
                             }
 
-                            if ((conf_autoSendFiles) && (isValidFileRequest(getUrl)) && (binaryResp == null) && (msg == null))
+                            if ((conf_autoSendFiles) && (isValidFileRequest(input.resource)) && ((output.body == null) || (output.body.Length == 0)))
                             {
-                                loadFile(getUrl, out binaryResp, out mime, out status);
+                                loadFile(input.resource, out output.body, out output.mime, out output.httpStatus);
                             }
 
                             estado = "processaRequisicao_preparaResposta";
@@ -592,60 +576,47 @@ namespace KW
                     #endregion 
                     #region processaRequisicao_preparaResposta
                     case "processaRequisicao_preparaResposta":
-                        if (msg == null)
-                            msg = "";
-
-                        if (binaryResp == null)
-                        {
-
-                            if (onContentReady != null)
-                            {
-                                byte[] temp = onContentReady(method, getUrl, body, "text/html", System.Text.Encoding.Default.GetBytes(msg), mySocket.Client);
-                                if (temp != null)
-                                    msg = System.Text.Encoding.Default.GetString(temp);
-                            }
-
-                            if (status == 0)
-                                status = 200;
-                        }
-                        else
-                        {
-                            if (onContentReady != null)
-                            {
-                                byte[] temp = onContentReady(method, getUrl, body, mime, binaryResp, mySocket.Client);
-                                if (temp != null)
-                                    binaryResp = temp;
-                            }
-
-                        }
-
-                        if (mime == "")
-                            mime = "text/html; charset=UTF-8";
-
-                        if ((opHeaders != "") && (opHeaders != null))
-                            opHeaders = "\r\n" + opHeaders;
-
-                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(status) + "\r\n" +
-                                                        "Server: Kiwiisco Webserver 1.1, embedded version\r\n" +
-                                                        "Content-Type: " + mime + "\r\n" +
-                                                        "Content-Length: " + (binaryResp == null ? Convert.ToString(Encoding.UTF8.GetByteCount(msg)) : binaryResp.Length.ToString()) + "\r\n" +
-                                                        "Accept-Ranges: bytes\r\n" +
-                                                        "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") +
-                                                        opHeaders + "\r\n\r\n" + msg;
 
 
-                        if (binaryResp == null)
-                            buffer = Encoding.UTF8.GetBytes(dataSend);
-                        else
-                        {
-                            //coloca os dados binários no buffer
-                            buffer = new byte[dataSend.Length + binaryResp.Length];
+                        if (output.body == null)
+                            output.body = new byte[0];
+
+                        if (onContentReady != null)
+                            onContentReady(ref output);
+
+                        if (status == 0)
+                            status = 200;
+                        
+
+                        if (output.mime == "")
+                            output.mime = "text/html";
+
+                        if (!output.mime.ToLower().Contains("charset") && this.conf_defaultCharSet != "")
+                            output.mime += "; charset=" + this.conf_defaultCharSet;
+
+
+                        dataSend = "HTTP/1.1 " + status.ToString() + " " + getHttpCodeDescription(output.httpStatus) + "\r\n" +
+                            "Server: " + (output.headers.ContainsKey("Server") ? output.headers["Server"] : "Kiwiisco Webserver 1.1, embedded version\r\n") +
+                            "Content-Type: " + output.mime + "\r\n" +
+                            "Content-Length: " + output.body.Length + "\r\n" +
+                            "Accept-Ranges: bytes\r\n" +
+                            "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") + "\r\n";
+                            //add coustom headers
+
+                            foreach (var c in output.headers)
+                                dataSend += c + "\r\n";
+
+                            //add header and content separador
+                            dataSend += "\r\n";
+
+                            buffer = new byte[dataSend.Length + output.body.Length];
+                            //put the dataSend bytes to buffer
                             for (cont = 0; cont < dataSend.Length; cont++)
                                 buffer[cont] = Convert.ToByte(dataSend[cont]);
 
-                            for (cont = 0; cont < binaryResp.Length; cont++)
-                                buffer[cont + dataSend.Length] = binaryResp[cont];
-                        }
+                            //put the content bbytes to buffer
+                            for (cont = 0; cont < output.body.Length; cont++)
+                                buffer[cont + dataSend.Length] = output.body[cont];
 
                         estado = "enviarResposta";
                         break;
@@ -655,11 +626,7 @@ namespace KW
 
 
                         if (onReadyToSend != null)
-                        {
-                            byte[] temp = onReadyToSend(method, getUrl, body, mime, buffer, mySocket.Client);
-                            if (temp != null)
-                                buffer = temp;
-                        }
+                            onReadyToSend(ref output);
 
                         try
                         {
@@ -690,7 +657,7 @@ namespace KW
 
                         webSocketStreams.Add(sslStream);
                         if (onWebSocketConnected != null)
-                            onWebSocketConnected(getUrl, sslStream);
+                            onWebSocketConnected(input.resource, sslStream);
 
                         estado = "lerDadosWebSocks";
                         break;
@@ -707,7 +674,7 @@ namespace KW
 
                             if (onWebSocketData != null)
                             {
-                                msg = onWebSocketData(getUrl, sslStream, novosDados, decoded, out resultRawData);
+                                string msg = onWebSocketData(input.resource, sslStream, novosDados, decoded, out resultRawData);
                                 if ((msg != null) && (msg != ""))
                                 {
                                     sendWebSocketData(sslStream, msg);
@@ -741,7 +708,7 @@ namespace KW
                             {
                                 webSocketStreams.Remove(sslStream);
                                 if (onWebSocketDisconnected != null)
-                                    onWebSocketDisconnected(getUrl, sslStream);
+                                    onWebSocketDisconnected(input.resource, sslStream);
                             }
                         }
                         catch { }
@@ -752,17 +719,10 @@ namespace KW
                             sslStream.Close();
                             sslStream.Dispose();
                             buffer = null;
-                            binaryResp = null;
-                            tempBuf = null;
-                            bReceive = null;
+                            output.Dispose();
+                            input.Dispose();
                             dataSend = null;
-                            getUrl = null;
-                            msg = null;
-                            mime = null;
-                            opHeaders = null;
                             sBuffer = null;
-                            body = null;
-                            method = null;
                             webSocketKey = null;
                             strHeader = null;
                             novosDados = null;
@@ -782,27 +742,20 @@ namespace KW
                 {
                     webSocketStreams.Remove(sslStream);
                     if (onWebSocketDisconnected != null)
-                        onWebSocketDisconnected(getUrl, sslStream);
+                        onWebSocketDisconnected(input.resource, sslStream);
                 }
             }
             catch { }
 
             buffer = null;
-            binaryResp = null;
-            tempBuf = null;
-            bReceive = null;
             dataSend = null;
-            getUrl = null;
-            msg = null;
-            mime = null;
-            opHeaders = null;
             sBuffer = null;
-            body = null;
-            method = null;
             webSocketKey = null;
             strHeader = null;
             novosDados = null;
             estado = null;
+            input.Dispose();
+            output.Dispose();
         }
 
         public static string GetWebSocketDecodedData(byte[] buffer, int length, out byte[] rawDecodedData)
