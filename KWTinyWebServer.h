@@ -47,6 +47,8 @@ namespace Shared{
                 this->contentBody = new char[data.size()];
                 for (int cont = 0; cont < data.size(); cont++)
                     this->contentBody[cont] = data[cont];
+
+                this->contentLength = data.size();
             }
     };
 
