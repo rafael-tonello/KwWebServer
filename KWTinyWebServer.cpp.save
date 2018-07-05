@@ -56,9 +56,9 @@ namespace Shared{
             serv_addr->sin_addr.s_addr = INADDR_ANY;
             serv_addr->sin_port = htons(self->__port);
 
-            usleep(1000);
+            usleep(10000);
             status = bind(listener, (struct sockaddr *) serv_addr, sizeof(*serv_addr));
-            usleep(1000);
+            usleep(10000);
             if (status >= 0)
             {
                 //SetSocketBlockingEnabled(listener, false);
@@ -74,6 +74,10 @@ namespace Shared{
 
                         if (client >= 0)
                         {
+			int error_code = client;
+			socklen_t error_code_size = sizeof(error_code);
+		        getsockopt(socket, SOL_SOCKET, SO_ERROR, &error_code, &error_code_size);
+	        		string desc(strerror(error_code));
 			cout << "Client accepted: "<< client << endl << flush;
 			usleep(100000);
                             thTalkWithClient = new pthread_t;
@@ -143,8 +147,8 @@ namespace Shared{
         //waiting for webkit
         while (!__SocketIsConnected(client))
         {
-            usleep(10000);
-            startTimeout -= 10;
+            usleep(100000);
+            startTimeout -= 100;
             if (startTimeout <= 0)
             {
                 cout << "Browser doesn't stablished the connection"<<endl << flush;
