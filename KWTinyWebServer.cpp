@@ -69,13 +69,13 @@ namespace Shared{
                     clientSize = sizeof(cli_addr);
                     while (true)
                     {
-			usleep(100000);
+			            usleep(1000);
                         int client = accept(listener, (struct sockaddr *) cli_addr, &clientSize);
 
                         if (client >= 0)
                         {
-			cout << "Client accepted: "<< client << endl << flush;
-			usleep(100000);
+			                cout << "Client accepted: "<< client << endl << flush;
+			                usleep(1000);
                             thTalkWithClient = new pthread_t;
                             tmp = new void*[3];
                             tmp[0] = self;
