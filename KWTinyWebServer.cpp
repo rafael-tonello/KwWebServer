@@ -201,8 +201,8 @@ namespace Shared{
                     }
                     else
                     {
-                        usleep(100000);
-                        startTimeout -= 100;
+                        usleep(10000);
+                        startTimeout -= 10;
                         if (startTimeout <= 0)
                         {
                             cout << "Browser don't send headers" << endl << flush;
