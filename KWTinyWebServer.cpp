@@ -69,13 +69,13 @@ namespace Shared{
                     clientSize = sizeof(cli_addr);
                     while (true)
                     {
-			            usleep(1000);
-                        int client = accept(listener, (struct sockaddr *) cli_addr, &clientSize);
+                        usleep(10000);
+//                        int client = accept(listener, (struct sockaddr *) cli_addr, &clientSize);
+			int client = accept(listener, 0, 0);
 
                         if (client >= 0)
                         {
-			                cout << "Client accepted: "<< client << endl << flush;
-			                usleep(1000);
+//			                cout << "Client accepted: "<< client << endl << flush;
                             thTalkWithClient = new pthread_t;
                             tmp = new void*[3];
                             tmp[0] = self;
@@ -104,6 +104,8 @@ namespace Shared{
 
     void *ThreadTalkWithClientFunction(void *arguments)
     {
+        usleep(1000);
+//nanosleep((const struct timespec[]){{0, 10000000}}, NULL);
         void** params = (void**)arguments;
         KWTinyWebServer *self = (KWTinyWebServer*)params[0];
         int client = *((int*)(params[1]));
@@ -131,7 +133,7 @@ namespace Shared{
         vector<string> tempHeaderParts;
         unsigned long ToRead = 0;
 
-        int receiveTimeout = 10000;
+        int receiveTimeout = 1000;
         int contentStart;
         string temp;
 
@@ -143,7 +145,7 @@ namespace Shared{
         //waiting for webkit
         while (!__SocketIsConnected(client))
         {
-            usleep(10000);
+            usleep(1000);
             startTimeout -= 10;
             if (startTimeout <= 0)
             {
@@ -181,7 +183,7 @@ namespace Shared{
                 tempBuffer = NULL;
             }
             else
-                usleep(20000);
+                usleep(2000);
 
 
             
@@ -201,7 +203,7 @@ namespace Shared{
                     }
                     else
                     {
-                        usleep(10000);
+                        usleep(1000);
                         startTimeout -= 10;
                         if (startTimeout <= 0)
                         {
@@ -410,21 +412,10 @@ namespace Shared{
             delete[] tempIndStrConvert; tempIndStrConvert = NULL;
         }
 
-        /*for (unsigned int cont = 0; cont < receivedData.headers.size(); cont++)
-            receivedData.headers.at(cont).clear();
-
-        if (dataToSend.contentBody)
-        {
-            //delete[] dataToSend.contentBody;
-            dataToSend.contentBody = new char[0];
-        }
-        for (unsigned int cont = 0; cont < dataToSend.headers.size(); cont++)
-            dataToSend.headers.at(cont).clear();*/
 
         strUtils.~StringUtils();
         //delete &strUtils;
         //pthread_join(*thTalkWithClient, NULL);
-
         pthread_detach(*thTalkWithClient);
         pthread_exit(0);
     }
@@ -536,8 +527,8 @@ namespace Shared{
         getsockopt(socket, SOL_SOCKET, SO_ERROR, &error_code, &error_code_size);
         string desc(strerror(error_code));
 
-        if (error_code != 0)
-            cout <<"ErrorCode: " << error_code << "("<< desc << ")" << endl << flush;
+//        if (error_code != 0)
+//            cout <<"ErrorCode: " << error_code << "("<< desc << ")" << endl << flush;
 
         return error_code == 0;
 
