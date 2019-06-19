@@ -16,6 +16,7 @@ namespace KWShared{
     bool __SocketIsConnected( int socket);
     unsigned char* base64_decode(std::string const& encoded_string);
 	std::string base64_encode(unsigned char * buf, unsigned int bufLen);
+	string getFileETag(string fileName);
 
 	KWTinyWebServer::~KWTinyWebServer()
 	{
@@ -83,8 +84,8 @@ namespace KWShared{
 		receivedData.client = client;
 		dataToSend.client = client;
 		//char *tempBuffer = NULL;
-		char readBuffer[1024];
-		char writeBuffer[1024];
+		char readBuffer[2048];
+		char writeBuffer[2048];
 		char * tempBuffer2  = NULL ;
 		vector<char> rawBuffer;
 		int readed = 1;
@@ -111,8 +112,15 @@ namespace KWShared{
 		string upgrade = "";
 		unsigned int currentContentLength;
 
+		//the flag bellow is used  when a websocket connection is detected to don't close the socket at end of HttpProcessThread thread.
+		bool letSocketOpen  = false;
+		char dtStr[256];
+        time_t t;
+        struct tm *timep;
+
 		//waiting for webkit
-		/*while (!__SocketIsConnected(client))
+
+		while (!__SocketIsConnected(client))
 		{
 			usleep(1000);
 			startTimeout -= 1;
@@ -121,7 +129,7 @@ namespace KWShared{
 				cout << "Browser doesn't stablished the connection"<<endl << flush;
 				break;
 			}
-		}*/
+		}
 
 		//set read timeout
 		struct timeval tv;
@@ -129,7 +137,6 @@ namespace KWShared{
 		tv.tv_usec = 0;
 
 		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
-
 
 		startTimeout = 2000;
 
@@ -264,10 +271,8 @@ namespace KWShared{
             }
 
 
-
             if (secWebSocketKey != "")
             {
-                cout << " the secWebSocketKey received is [" << secWebSocketKey << "]" << endl;
                 string concat = secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 
@@ -275,7 +280,6 @@ namespace KWShared{
                 unsigned char sha1result[SHA_DIGEST_LENGTH];
                 SHA1((unsigned char*)concat.c_str(), concat.size(), sha1result);
                 string secWebSocketBase64 = base64_encode(sha1result, SHA_DIGEST_LENGTH);
-                cout << "base 64 result = " << secWebSocketBase64 << endl;
 
 
 
@@ -303,22 +307,34 @@ namespace KWShared{
 
                 pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
 
+                letSocketOpen = true;
+
+                //this time must be enough to new thread be started. It's just a prediction, ensuring that the new thread
+                //has access to the current thread variables.
+                usleep(100000);
+
             }
             else
                 state = ERROR_400_BADREQUEST;
 
 
         }
-
         else{
-            temp = "Connection: Close\r\n";
-            addStringToCharList(&rawBuffer, &temp, NULL, -1);
+            dataToSend.headers.push_back({"Connection", "Close"});
         }
+
 		while ((state != FINISHED) && (__SocketIsConnected(client)))
 		{
 			switch(state)
 			{
 				case SEND_REQUEST_TO_APP:
+                    //set current time in the response
+                    t = time(0);
+                    timep = gmtime(&t);
+                    strftime(dtStr, 256, "%a, %d %b %Y %T GMT", timep);
+                    dataToSend.headers.push_back({"date", string(dtStr)});
+
+
 					//try ausendFiles
 					self->__TryAutoLoadFiles(&receivedData, &dataToSend);
 
@@ -348,7 +364,6 @@ namespace KWShared{
 
 					temp = "Server: "+self->__serverName+"\r\n";
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
-
 
 					if (dataToSend.contentLength > 0)
 					{
@@ -386,11 +401,12 @@ namespace KWShared{
 					//convert raw buffer to char*
 
 
-					//The block of code bello sends the buffer in locks of 128 bytes, and , in error case, try to resend blocks
+					//The block of code bellow sends the buffer in locks of 128 bytes, and , in error case, try to resend blocks
 					//{
 						sendSize = rawBuffer.size();
 
 						writed = 0;
+
 						while (writed < sendSize)
 						{
 							for (cBytes = 0; writed + cBytes < sendSize && cBytes <128; cBytes++)
@@ -407,7 +423,6 @@ namespace KWShared{
 					//}
 
 					rawBuffer.clear();
-
 
 					//clear data
 					delete[] tempIndStrConvert;
@@ -433,7 +448,11 @@ namespace KWShared{
 					state = FINISHED;
 				break;
 			}
+
 		}
+
+		if (!letSocketOpen)
+            close(client);
 
 
 		delete[] params;
@@ -443,6 +462,10 @@ namespace KWShared{
 			delete[] tempIndStrConvert;
 			tempIndStrConvert = NULL;
 		}
+
+
+
+
 
 		pthread_detach(*thTalkWithClient);
 		pthread_exit(0);
@@ -495,20 +518,21 @@ namespace KWShared{
 					cout << "The server is listening and waiting for news connections" << endl;
 					while (true)
 					{
-                        int tempClient = accept(listener, (struct sockaddr *) cli_addr, &clientSize);
+                        int *tempClient = new int;
+                        *tempClient = accept(listener, (struct sockaddr *) cli_addr, &clientSize);
+
 						//int client = accept(listener, 0, 0);
 
 						if (tempClient >= 0)
 						{
-	//			                cout << "Client accepted: "<< client << endl << flush;
 							thTalkWithClient = new pthread_t;
 							tmp = new void*[3];
 							tmp[0] = self;
-							tmp[1] = &tempClient;
+							tmp[1] = tempClient;
 							tmp[2] = thTalkWithClient;
 
 							pthread_create(thTalkWithClient, NULL, HttpProcessThread, tmp);
-
+							//HttpProcessThread(tmp);
 
 						}
 						else
@@ -542,9 +566,6 @@ namespace KWShared{
 		int readCount;
 		char readBuffer[1024];
 
-		cout << "Ok, we are on the websocket processment sybsystem" << endl;
-
-
 		//packinfo data
         bool fin;
         bool resv3;
@@ -565,13 +586,14 @@ namespace KWShared{
 
         WS_STATES state = WS_READING_PACK_INFO_1;
 
-
+        usleep(2000000);
+        self->__observer->OnWebSocketConnect(client);
 
 		while ((state != WS_FINISHED) && (__SocketIsConnected(client)))
 		{
 			//tempBuffer = new char[2048];
+
 			readCount = recv(client,readBuffer, sizeof(readBuffer), 0);
-			cout << "readCount (websocket) result: " << readCount << endl;
 
 
 			if (readCount > 0)
@@ -739,18 +761,28 @@ namespace KWShared{
             }
             else if (readCount == 0)
 			{
-                //conection was closed by remote end point
                 state  = WS_FINISHED;
+                cout << "The connection was closed by remote host" << endl;
             }
             else
             {
-                cout << "Connection error: " << to_string(errno) << "("<< strerror(errno)<<")" << endl;
+                //The execution will drop here any time some read error occurrs, including  int ime out cases. In cases of timeout,
+                //the "erno" flag will have the value 11 (Resource temporarily unavailable).
 
-                //state  = WS_FINISHED;
+                if (errno != 11)
+                    cout << "Connection error: " << to_string(errno) << "("<< strerror(errno)<<")" << endl;
+
+                if (errno != 11)
+                    state  = WS_FINISHED;
             }
 		}
 
+		self->__observer->OnWebSocketDisconnect(client);
+
 		close(client);
+
+		pthread_detach(*thTalkWithClient);
+		pthread_exit(0);
 	}
 
 	std::string base64_encode(unsigned char * buf, unsigned int bufLen) {
@@ -792,6 +824,12 @@ namespace KWShared{
       }
 
       return ret;
+    }
+
+    string getFileETag(string fileName)
+    {
+        //calculates a ETAG using file last modification
+
     }
 
     unsigned char* base64_decode(std::string const& encoded_string) {
@@ -886,34 +924,88 @@ namespace KWShared{
             if (sysLink.fileExists(filePath))
             {
                 //try to identificate the filetype
+                //gets the lats file modification (this information will be used a few times above)
+                struct stat attrib;
+                struct tm *time;
+                char dtStr[256];
+                stat(filePath.c_str(), &attrib);
+                time = gmtime(&(attrib.st_mtime));
+                strftime(dtStr, 256, "%a, %d %b %Y %T GMT", time);
+                string lastModificationTime(dtStr);
+                string ETag = base64_encode((unsigned char*)lastModificationTime.c_str(), lastModificationTime.size());
 
-                if (fNameUpper.find(".GIF") != string::npos)
-                    out->contentType = "image/gif";
-                else if (fNameUpper.find(".JPG") != string::npos)
-                    out->contentType = "image/jpeg";
-                else if (fNameUpper.find(".SVG") != string::npos)
-                    out->contentType = "image/svg+xml";
-                else if (fNameUpper.find(".PNG") != string::npos)
-                    out->contentType = "image/png";
-                else if (fNameUpper.find(".ICO") != string::npos)
-                    out->contentType = "image/ico";
-                else if (fNameUpper.find(".HTM") != string::npos)
-                    out->contentType = "text/html";
-                else if (fNameUpper.find(".CSS") != string::npos)
-                    out->contentType = "text/css";
-                else if (fNameUpper.find(".JS") != string::npos)
-                    out->contentType = "text/javascript";
+                //checks if browseris just browser is just checking by modifications in the resource
+                string ifNoneMatchHeader = "";
+                for (auto &curr : in->headers)
+                {
+                    if (curr.at(0) == "IF-NONE-MATCH")
+                    {
+                        ifNoneMatchHeader = curr.at(1);
+                        break;
+                    }
+                }
 
-                else if (fNameUpper.find(".JSON") != string::npos)
-                    out->contentType = "application/json";
+                if (ifNoneMatchHeader == "" || ifNoneMatchHeader != ETag){
+
+
+
+                    if (fNameUpper.find(".GIF") != string::npos)
+                        out->contentType = "image/gif";
+                    else if (fNameUpper.find(".JPG") != string::npos)
+                        out->contentType = "image/jpeg";
+                    else if (fNameUpper.find(".SVG") != string::npos)
+                        out->contentType = "image/svg+xml";
+                    else if (fNameUpper.find(".PNG") != string::npos)
+                        out->contentType = "image/png";
+                    else if (fNameUpper.find(".ICO") != string::npos)
+                        out->contentType = "image/ico";
+                    else if (fNameUpper.find(".HTM") != string::npos)
+                        out->contentType = "text/html";
+                    else if (fNameUpper.find(".CSS") != string::npos)
+                        out->contentType = "text/css";
+                    else if (fNameUpper.find(".JS") != string::npos)
+                        out->contentType = "text/javascript";
+
+                    else if (fNameUpper.find(".JSON") != string::npos)
+                        out->contentType = "application/json";
+                    else
+                        out->contentType = "text/plain";
+
+                    //load the file ontent
+                    {
+                        out->contentLength = sysLink.getFileSize(filePath);
+
+                        out->contentBody = new char[out->contentLength];
+                        sysLink.readFile(filePath, out->contentBody, 0, out->contentLength);
+                    }
+
+                    //set the cache headers
+                    {
+                        //out->headers.push_back({"cache-control", "public, max-age=3600"});
+                        out->headers.push_back({"cache-control", "public, max-age=3600, no-cache, must-revalidate"});
+
+
+                        //get file last modification time
+
+                        out->headers.push_back({"last-modified", lastModificationTime});
+
+                        out->headers.push_back({"ETag", ETag});
+                        //set the ETag header
+
+
+
+                    }
+
+                }
                 else
-                    out->contentType = "text/plain";
 
-                //load the file ontent
-                out->contentLength = sysLink.getFileSize(filePath);
+                {
+                    //just prepare a 304 (not modified) response
+                    out->httpStatus = 304;
+                    out->httpMessage = "Not Modified";
 
-                out->contentBody = new char[out->contentLength];
-                sysLink.readFile(filePath, out->contentBody, 0, out->contentLength);
+                }
+
 
                 //stop find operations
                 breakFors = true;
@@ -931,8 +1023,8 @@ namespace KWShared{
     {
         // The buffer belllow is enought to contains the header in the all cases (2 bytes of information + max key
         //size, 64 bits)
-        char headerBuffer[10] = {0};
-        int headerSize = 2;
+        char headerBuffer[10 + size] = {0};
+        int headerSize = 0;
 
         //for this method, all packs will be send in one frame. So, determines the fin bit as true
         headerBuffer[0] = headerBuffer[0] | 0b10000000;
@@ -951,14 +1043,15 @@ namespace KWShared{
         {
             uint8_t sizeI8= size;
             headerBuffer[1] = headerBuffer[1] | sizeI8;
+            headerSize = 2;
         }
         else if (size < 65536)
         {
             uint16_t sizeI16 = size;
             char* sizeI16Buffer = (char*)&sizeI16;
             headerBuffer[1] = headerBuffer[1] | 126;
-            headerBuffer[2] = sizeI16Buffer[0];
-            headerBuffer[3] = sizeI16Buffer[1];
+            headerBuffer[2] = sizeI16Buffer[1];
+            headerBuffer[3] = sizeI16Buffer[0];
             headerSize = 4;
         }
         else
@@ -966,22 +1059,26 @@ namespace KWShared{
             uint64_t sizeI64 = size;
             char* sizeI64Buffer = (char*)&sizeI64;
             headerBuffer[1] = headerBuffer[1] | 127;
-            headerBuffer[2] = sizeI64Buffer[0];
-            headerBuffer[3] = sizeI64Buffer[1];
-            headerBuffer[4] = sizeI64Buffer[2];
-            headerBuffer[5] = sizeI64Buffer[3];
-            headerBuffer[6] = sizeI64Buffer[4];
-            headerBuffer[7] = sizeI64Buffer[5];
-            headerBuffer[8] = sizeI64Buffer[6];
-            headerBuffer[9] = sizeI64Buffer[7];
+            headerBuffer[2] = sizeI64Buffer[7];
+            headerBuffer[3] = sizeI64Buffer[6];
+            headerBuffer[4] = sizeI64Buffer[5];
+            headerBuffer[5] = sizeI64Buffer[4];
+            headerBuffer[6] = sizeI64Buffer[3];
+            headerBuffer[7] = sizeI64Buffer[2];
+            headerBuffer[8] = sizeI64Buffer[1];
+            headerBuffer[9] = sizeI64Buffer[0];
             headerSize = 10;
         }
 
-        //sendheader to client
-        send(client, headerBuffer, headerSize, 0);
+        for (int c = 0; c < size; c++)
+        {
+            headerBuffer[c + headerSize] = data[c];
+        }
 
+        //sendheader to client
+        send(client, headerBuffer, headerSize + size, 0);
         //send data to client
-        send(client, data, size, 0);
+        //send(client, data, size, 0);
 
     }
 

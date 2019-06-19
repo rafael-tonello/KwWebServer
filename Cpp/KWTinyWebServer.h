@@ -98,7 +98,9 @@ namespace KWShared{
     class WebServerObserver{
         public:
             virtual void OnHttpRequest(HttpData* in, HttpData* out) = 0;
+            virtual void OnWebSocketConnect(int client) = 0;
             virtual void OnWebSocketData(int client, char* data, unsigned long long dataSize) = 0;
+            virtual void OnWebSocketDisconnect(int client) = 0;
     };
 
 
