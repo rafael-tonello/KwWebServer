@@ -463,12 +463,8 @@ namespace KWShared{
 			tempIndStrConvert = NULL;
 		}
 
-
-
-
-
-		pthread_detach(*thTalkWithClient);
-		pthread_exit(0);
+		//pthread_detach(*thTalkWithClient);
+		//pthread_exit(0);
 	}
 
 	void *ThreadWaitClients(void *thisPointer)
@@ -486,8 +482,6 @@ namespace KWShared{
 		pthread_t *thTalkWithClient = NULL;
 		vector<pthread_t*> threads;
 		vector<int> clients;
-
-
 
 		listener = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -531,8 +525,10 @@ namespace KWShared{
 							tmp[1] = tempClient;
 							tmp[2] = thTalkWithClient;
 
-							pthread_create(thTalkWithClient, NULL, HttpProcessThread, tmp);
-							//HttpProcessThread(tmp);
+							//pthread_create(thTalkWithClient, NULL, HttpProcessThread, tmp);
+							self->__tasks->enqueue([&](void *arguments){
+                                HttpProcessThread(arguments);
+							}, tmp);
 
 						}
 						else
@@ -777,7 +773,9 @@ namespace KWShared{
             }
 		}
 
+        cout << "debuging 1" << endl;
 		self->__observer->OnWebSocketDisconnect(client);
+		cout << "debuging 2" << endl;
 
 		close(client);
 

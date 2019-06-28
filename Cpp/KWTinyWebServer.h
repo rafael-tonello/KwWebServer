@@ -39,6 +39,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <openssl/sha.h>
+#include "../ThreadPool/ThreadPool.h"
 
 namespace KWShared{
     using namespace std;
@@ -116,6 +117,7 @@ namespace KWShared{
             int __port;
             WebServerObserver *__observer;
             string __serverName;
+            ThreadPool * __tasks = new ThreadPool(10, 5);
 
         private:
             vector<string> __filesLocations;
