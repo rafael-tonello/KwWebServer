@@ -13,6 +13,7 @@
 #include <iostream>
 #include <errno.h>
 #include <strings.h>
+#include <string.h>
 
 using namespace std;
 

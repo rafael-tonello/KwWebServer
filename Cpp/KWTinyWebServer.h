@@ -121,6 +121,7 @@ namespace KWShared{
 
         private:
             vector<string> __filesLocations;
+
             pthread_t ThreadAwaitClients;
             SysLink sysLink;
     };

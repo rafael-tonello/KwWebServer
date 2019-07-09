@@ -77,6 +77,9 @@ namespace KWShared{
 		int client = *((int*)(params[1]));
 		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
 
+		delete [] params;
+		params = NULL;
+
 		//SetSocketBlockingEnabled(client, true);
 
 		string internalServerErrorMessage = "";
@@ -235,7 +238,7 @@ namespace KWShared{
 
 							break;
 						case AWAIT_CONTENT:
-							/*receivedData.contentBody[currentContentLength++] = readBuffer[cont];
+							receivedData.contentBody[currentContentLength++] = readBuffer[cont];
 
 							if (currentContentLength == receivedData.contentLength)
 							{
@@ -244,7 +247,7 @@ namespace KWShared{
 							}
 							else
 								usleep(500);
-*/
+
 							break;
 					}
 				}
@@ -342,6 +345,7 @@ namespace KWShared{
 
 					//clear used data
 					delete[] receivedData.contentBody;
+					receivedData.contentBody = NULL;
 
 					//mount response and send to client;
 					tempIndStrConvert = new char[10];
@@ -376,8 +380,6 @@ namespace KWShared{
 						temp = "Content-Length: "; temp.append(std::to_string(dataToSend.contentLength)); temp.append("\r\n");
                         addStringToCharList(&rawBuffer, &temp, NULL, -1);
 					}
-
-
 
 					//add custom headers
 					for (unsigned int cont = 0; cont < dataToSend.headers.size(); cont++)
@@ -517,7 +519,7 @@ namespace KWShared{
 
 						//int client = accept(listener, 0, 0);
 
-						if (tempClient >= 0)
+						if (*tempClient >= 0)
 						{
 							thTalkWithClient = new pthread_t;
 							tmp = new void*[3];
@@ -531,8 +533,11 @@ namespace KWShared{
 							}, tmp);
 
 						}
-						else
+						else{
+                            delete tempClient;
                             usleep(1000);
+                        }
+
 					}
 				}
 				else
@@ -554,6 +559,8 @@ namespace KWShared{
 		KWTinyWebServer *self = (KWTinyWebServer*)params[0];
 		int client = *((int*)(params[1]));
 		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
+
+		params = NULL;
 
 		enum WS_STATES {WS_FINISHED, WS_INTERNAL_SERVER_ERROR, WS_PAYLOAD_NOT_MASKED, WS_READING_PACK_INFO_1, WS_READING_PACK_INFO_2,
                         WS_READ_16BIT_SIZE, WS_READ_64BIT_SIZE, WS_READING_MASK_KEY, WS_READING_PAYLOAD};
@@ -744,6 +751,7 @@ namespace KWShared{
 
                                 }
                                 packPayload = NULL;
+
                                 tempIndex = 0;
 
 
