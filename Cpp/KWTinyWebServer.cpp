@@ -95,6 +95,7 @@ namespace KWShared{
 		string bufferStr = "";
 		string headerSpliter = "";
 		States state = AWAIT_HTTP_FIRST_LINE;
+		States prevState = AWAIT_HTTP_FIRST_LINE;
 		unsigned long headerEnd = 0;
 		StringUtils strUtils;
 		//vector<string> headerLines;
@@ -105,7 +106,7 @@ namespace KWShared{
 		string temp;
 		receivedData.httpStatus = 200;
 		dataToSend.httpStatus = 200;
-		int startTimeout = 2000;
+		int timeoutCounter = 2000;
 		unsigned int sendSize;
 		int writed = 0, tempWrited = 0;
 		int cBytes;
@@ -119,14 +120,15 @@ namespace KWShared{
 		char dtStr[256];
         time_t t;
         struct tm *timep;
+        long int startTime = self->getCurrDayMilisec();
 
 		//waiting for webkit
 
 		while (!__SocketIsConnected(client))
 		{
 			usleep(1000);
-			startTimeout -= 1;
-			if (startTimeout <= 0)
+			timeoutCounter -= 1;
+			if (timeoutCounter <= 0)
 			{
 				self->debug("Browser doesn't stablished the connection", true);
 				break;
@@ -140,11 +142,26 @@ namespace KWShared{
 
 		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 
-		startTimeout = 2000;
+		timeoutCounter = 5000;
 
 
 		while ((state != SEND_REQUEST_TO_APP) && (state != ERROR_500_INTERNALSERVERERROR) && (state != FINISHED) && (__SocketIsConnected(client)))
 		{
+			if (prevState != state)
+			{
+                startTime = self->getCurrDayMilisec();
+			}
+			else{
+                if (self->getCurrDayMilisec() - startTime > 5000)
+                {
+                    state = FINISHED;
+                    self->debug("A connection will be closed by timeout");
+                    continue;
+                }
+			}
+
+			prevState = state;
+
 			//tempBuffer = new char[2048];
 			readed = recv(client,readBuffer, sizeof(readBuffer), 0);
 
@@ -329,6 +346,21 @@ namespace KWShared{
 
 		while ((state != FINISHED) && (__SocketIsConnected(client)))
 		{
+            if (prevState != state)
+			{
+                startTime = self->getCurrDayMilisec();
+			}
+			else{
+                if (self->getCurrDayMilisec() - startTime > 5000)
+                {
+                    state = FINISHED;
+                    self->debug("A connection will be closed by timeout");
+                    continue;
+                }
+			}
+
+			prevState = state;
+
 			switch(state)
 			{
 				case SEND_REQUEST_TO_APP:
@@ -1433,6 +1465,15 @@ namespace KWShared{
         if (forceFlush)
             cout << flush;
 	}
+
+	long int KWTinyWebServer::getCurrDayMilisec()
+    {
+
+        struct timeval temp;
+        gettimeofday(&temp, NULL);
+
+        return temp.tv_sec * 1000 + temp.tv_usec/1000;
+    }
 
 
 }

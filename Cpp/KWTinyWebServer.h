@@ -40,6 +40,7 @@
 #include <unistd.h>
 #include <openssl/sha.h>
 #include "../ThreadPool/ThreadPool.h"
+#include<sys/time.h>
 
 namespace KWShared{
     using namespace std;
@@ -120,6 +121,7 @@ namespace KWShared{
             ThreadPool * __tasks = new ThreadPool(10, 5);
 
             void debug(string debug, bool forceFlush = false);
+            long int getCurrDayMilisec();
         private:
             vector<string> __filesLocations;
 
