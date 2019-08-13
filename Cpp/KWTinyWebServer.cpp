@@ -74,8 +74,7 @@ namespace KWShared{
 	{
 		void** params = (void**)arguments;
 		KWTinyWebServer *self = (KWTinyWebServer*)params[0];
-		int client = *((int*)(params[1]));
-		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
+		int client = ((int)(params[1]));
 
 		delete [] params;
 		params = NULL;
@@ -129,7 +128,7 @@ namespace KWShared{
 			startTimeout -= 1;
 			if (startTimeout <= 0)
 			{
-				cout << "Browser doesn't stablished the connection"<<endl << flush;
+				self->debug("Browser doesn't stablished the connection", true);
 				break;
 			}
 		}
@@ -164,9 +163,11 @@ namespace KWShared{
 								//a header was received
 								//process first line, that contains method and resource
                                 strUtils.split(bufferStr, " ", &tempHeaderParts);
+
 								//checks if the first session line (GET /resource HTTP_Version) is valid
 								if (tempHeaderParts.size() > 1)
 								{
+
 									receivedData.method = tempHeaderParts.at(0);
 									receivedData.resource =tempHeaderParts.at(1);
 									receivedData.contentLength = 0;
@@ -303,11 +304,10 @@ namespace KWShared{
 
                 //create a new thread to work with the web socket connection
                 pthread_t *thWebSocketProcess = new pthread_t;
-                void **tmp = new void*[4];
+                void **tmp = new void*[3];
                 tmp[0] = self;
                 tmp[1] = &client;
                 tmp[2] = thWebSocketProcess;
-				tmp[3] = &receivedData.resource;
 
                 pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
 
@@ -483,7 +483,6 @@ namespace KWShared{
 		int status;
 		socklen_t clientSize;
 		pthread_t *thTalkWithClient = NULL;
-		vector<pthread_t*> threads;
 		vector<int> clients;
 
 		listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -502,6 +501,11 @@ namespace KWShared{
 
 			usleep(1000);
 			status = bind(listener, (struct sockaddr *) serv_addr, sizeof(*serv_addr));
+
+			int reuse = 0;
+			if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
+                self->debug("setsockopt(SO_REUSEADDR) failed");
+
 			usleep(1000);
 			if (status >= 0)
 			{
@@ -512,7 +516,7 @@ namespace KWShared{
 
 					clientSize = sizeof(cli_addr);
 
-					cout << "The server is listening and waiting for news connections" << endl;
+					self->debug("The server is listening and waiting for news connections");
 					while (true)
 					{
                         int *tempClient = new int;
@@ -522,33 +526,31 @@ namespace KWShared{
 
 						if (*tempClient >= 0)
 						{
-							thTalkWithClient = new pthread_t;
 							tmp = new void*[3];
 							tmp[0] = self;
-							tmp[1] = tempClient;
-							tmp[2] = thTalkWithClient;
+							tmp[1] = (void*)(*tempClient);
 
-							//pthread_create(thTalkWithClient, NULL, HttpProcessThread, tmp);
 							self->__tasks->enqueue([&](void *arguments){
                                 HttpProcessThread(arguments);
 							}, tmp);
 
+
 						}
 						else{
-                            delete tempClient;
+                            //delete tempClient;
                             usleep(1000);
                         }
 
 					}
 				}
 				else
-					cout << "Failure to open socket" << endl << flush;
+					self->debug("Failure to open socket");
 			}
 			else
-				cout << "Failure to start socket system" << endl << flush;
+				self->debug("Failure to start socket system");
 		}
 		else
-			cout << "General error opening socket" << endl << flush;
+			self->debug("General error opening socket");
 
 		 //n = read(newsockfd,buffer,255);
 		 //n = write(newsockfd,"I got your message",18);
@@ -560,7 +562,6 @@ namespace KWShared{
 		KWTinyWebServer *self = (KWTinyWebServer*)params[0];
 		int client = *((int*)(params[1]));
 		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
-		string resource = string(((string*)params[3])->c_str());
 
 		params = NULL;
 
@@ -592,7 +593,7 @@ namespace KWShared{
         WS_STATES state = WS_READING_PACK_INFO_1;
 
         usleep(2000000);
-        self->__observer->OnWebSocketConnect(client, resource);
+        self->__observer->OnWebSocketConnect(client);
 
 		while ((state != WS_FINISHED) && (__SocketIsConnected(client)))
 		{
@@ -668,7 +669,7 @@ namespace KWShared{
                             }
                             else
                             {
-                                cout << "Error, websocket payload not masked" << endl;
+                                self->debug("Error, websocket payload not masked");
                                 state = WS_PAYLOAD_NOT_MASKED;
 
                                 //although it goes against the specification of WebSocket, it is possible to interpret unmarked packages from the
@@ -744,7 +745,7 @@ namespace KWShared{
                                     payloadSizes.clear();
                                     //send payload to application
 
-                                    self->__observer->OnWebSocketData(client, resource, fullPayload, totalPayload);
+                                    self->__observer->OnWebSocketData(client, fullPayload, totalPayload);
 
                                     //clear payload buffers
                                     delete[] fullPayload;
@@ -768,7 +769,12 @@ namespace KWShared{
             else if (readCount == 0)
 			{
                 state  = WS_FINISHED;
-                cout << "The connection was closed by remote host" << endl;
+                self->debug("The connection was closed by remote host");
+
+                pthread_detach(*thTalkWithClient);
+                pthread_exit(0);
+                int ret = 0;
+                return (void*)ret;
             }
             else
             {
@@ -776,16 +782,17 @@ namespace KWShared{
                 //the "erno" flag will have the value 11 (Resource temporarily unavailable).
 
                 if (errno != 11)
-                    cout << "Connection error: " << to_string(errno) << "("<< strerror(errno)<<")" << endl;
+                {
+                    string t = "Connection error: " + to_string(errno) + "(" +strerror(errno) + ")";
+                    self->debug(t);
+                }
 
                 if (errno != 11)
                     state  = WS_FINISHED;
             }
 		}
 
-        cout << "debuging 1" << endl;
-		self->__observer->OnWebSocketDisconnect(client, resource);
-		cout << "debuging 2" << endl;
+		self->__observer->OnWebSocketDisconnect(client);
 
 		close(client);
 
@@ -1022,7 +1029,8 @@ namespace KWShared{
             else
             {
                 out->contentType = "notFound";
-                cout << "the file << " << fName << "could not be found " << endl;
+                string t = "the file " + fName + "could not be found ";
+                debug(t);
             }
         }
     }
@@ -1104,7 +1112,7 @@ namespace KWShared{
     void StringUtils::split(string str,string sep, vector<string> *result)
     {
          str += "\0";
-         char* cstr=const_cast<char*>(str.c_str());
+         /*char* cstr=const_cast<char*>(str.c_str());
          char* current = NULL;
          current=strtok(cstr,sep.c_str());
          while(current!=NULL){
@@ -1116,9 +1124,27 @@ namespace KWShared{
 
          //delete[] cstr;
          str.clear();
-         sep.clear();
+         sep.clear();*/
 
          //return result;
+         string tmp;
+         size_t nextIndex = -1;
+         while (true)
+         {
+            nextIndex = str.find(sep);
+            if (nextIndex != string::npos)
+            {
+                result->push_back(str.substr(0, nextIndex));
+                if (nextIndex + 1 < str.size())
+                    str = str.substr(nextIndex+1);
+            }
+            else
+                break;
+         }
+
+         result->push_back(str);
+         str.clear();
+         sep.clear();
     }
 
     std::string StringUtils::toUpper(std::string source)
@@ -1363,7 +1389,6 @@ namespace KWShared{
 		//prepre a command to be executed
 		string command = "ls --full-time -Gg ''"+directoryName+lsFilter+"'' | grep "+grepArguments+" >\""+tmpFile+"\"";
 
-		cout << "vai executar o comando " << command << endl << flush;
 
 		string textResult;
 
@@ -1400,7 +1425,14 @@ namespace KWShared{
 		}
 		lines.clear();
 		return result;
-
-
 	}
+
+	void KWTinyWebServer::debug(string debugMessage, bool forceFlush)
+	{
+        cout << "WebServer: " << debugMessage << endl;
+        if (forceFlush)
+            cout << flush;
+	}
+
+
 }

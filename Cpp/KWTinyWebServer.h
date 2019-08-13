@@ -39,7 +39,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <openssl/sha.h>
-#include "ThreadPool.h"
+#include "../ThreadPool/ThreadPool.h"
 
 namespace KWShared{
     using namespace std;
@@ -99,9 +99,9 @@ namespace KWShared{
     class WebServerObserver{
         public:
             virtual void OnHttpRequest(HttpData* in, HttpData* out) = 0;
-            virtual void OnWebSocketConnect(int client, string resource) = 0;
-            virtual void OnWebSocketData(int client, string resource, char* data, unsigned long long dataSize) = 0;
-            virtual void OnWebSocketDisconnect(int client, string resource) = 0;
+            virtual void OnWebSocketConnect(int client) = 0;
+            virtual void OnWebSocketData(int client, char* data, unsigned long long dataSize) = 0;
+            virtual void OnWebSocketDisconnect(int client) = 0;
     };
 
 
@@ -119,6 +119,7 @@ namespace KWShared{
             string __serverName;
             ThreadPool * __tasks = new ThreadPool(10, 5);
 
+            void debug(string debug, bool forceFlush = false);
         private:
             vector<string> __filesLocations;
 
