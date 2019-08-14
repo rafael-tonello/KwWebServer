@@ -523,6 +523,9 @@ namespace KWShared{
 
 		if (listener >= 0)
 		{
+            int reuse = 1;
+			if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
+                self->debug("setsockopt(SO_REUSEADDR) failed");
 			//fill(std::begin(serv_addr), std::end(serv_addr), T{});
 			//bzero((char *) &serv_addr, sizeof(serv_addr));
 			//setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char *) &iOptVal, &iOptLen);
@@ -534,9 +537,7 @@ namespace KWShared{
 			usleep(1000);
 			status = bind(listener, (struct sockaddr *) serv_addr, sizeof(*serv_addr));
 
-			int reuse = 0;
-			if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) < 0)
-                self->debug("setsockopt(SO_REUSEADDR) failed");
+
 
 			usleep(1000);
 			if (status >= 0)
