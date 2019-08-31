@@ -321,10 +321,11 @@ namespace KWShared{
 
                 //create a new thread to work with the web socket connection
                 pthread_t *thWebSocketProcess = new pthread_t;
-                void **tmp = new void*[3];
+                void **tmp = new void*[4];
                 tmp[0] = self;
                 tmp[1] = &client;
                 tmp[2] = thWebSocketProcess;
+				tmp[3] = &receivedData.resource;
 
                 pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
 
@@ -595,6 +596,7 @@ namespace KWShared{
 		KWTinyWebServer *self = (KWTinyWebServer*)params[0];
 		int client = *((int*)(params[1]));
 		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
+		string resource = string(((string*)params[3])->c_str());
 
 		params = NULL;
 
@@ -626,7 +628,7 @@ namespace KWShared{
         WS_STATES state = WS_READING_PACK_INFO_1;
 
         usleep(2000000);
-        self->__observer->OnWebSocketConnect(client);
+        self->__observer->OnWebSocketConnect(client, resource);
 
 		while ((state != WS_FINISHED) && (__SocketIsConnected(client)))
 		{
@@ -778,7 +780,7 @@ namespace KWShared{
                                     payloadSizes.clear();
                                     //send payload to application
 
-                                    self->__observer->OnWebSocketData(client, fullPayload, totalPayload);
+                                    self->__observer->OnWebSocketData(client, resource, fullPayload, totalPayload);
 
                                     //clear payload buffers
                                     delete[] fullPayload;
@@ -825,7 +827,7 @@ namespace KWShared{
             }
 		}
 
-		self->__observer->OnWebSocketDisconnect(client);
+		self->__observer->OnWebSocketDisconnect(client, resource);
 
 		close(client);
 
