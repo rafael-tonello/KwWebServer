@@ -11,6 +11,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace KW
 {
@@ -105,7 +106,7 @@ namespace KW
             for (int cont = 0; cont < conf_filesFolders.Count; cont++)
             {
                 if ((this.conf_filesFolders[cont].Length > 0) && (this.conf_filesFolders[cont][this.conf_filesFolders[cont].Length - 1] != '\\'))
-                    this.conf_filesFolders[cont] += '\\';
+                    this.conf_filesFolders[cont] += '/';
             }
 
             try
@@ -302,7 +303,7 @@ namespace KW
                 c.Interrupt();
         }
 
-        List<Thread> threads = new List<Thread>();
+        //List<Thread> threads = new List<Thread>();
 
         private void StartListen(TcpListener listener)
         {
@@ -328,9 +329,18 @@ namespace KW
                             TcpClient client = listener2.EndAcceptTcpClient(ar);
 
                             //escutaCliente(client, 0);
-                            Thread temp = new Thread(delegate (object threadPointer) { escutaCliente(client, 0, (Thread)threadPointer); });
-                            threads.Add(temp);
-                            temp.Start(temp);
+
+                            //Thread temp = new Thread(delegate (object threadPointer) {});
+                            Action<TcpClient> ac = (clientP) => {
+                                Task t = new Task(delegate ()
+                                {
+                                    escutaCliente(clientP);
+
+                                });
+
+                                t.Start();
+                            };
+                            ac.Invoke(client);
 
                             //listener = null;
                             //client = null;
@@ -347,7 +357,7 @@ namespace KW
             return;
         }
 
-        public void escutaCliente(TcpClient mySocket, int threadIndex, Thread threadPointer)
+        public void escutaCliente(TcpClient mySocket)
         {
 
             HttpSessionData input = new HttpSessionData();
@@ -728,7 +738,7 @@ namespace KW
                             novosDados = null;
                             estado = null;
 
-                            threads.Remove(threadPointer);
+                            //threads.Remove(threadPointer);
                         }
                         catch { }
                         break;
@@ -864,7 +874,7 @@ namespace KW
                 }
 
 
-                //if aniony not respondi, return false
+                //if anyone respond, return false
                 if (sucess == 0)
                     return false;
             }
