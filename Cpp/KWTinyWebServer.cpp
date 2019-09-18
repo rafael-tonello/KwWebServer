@@ -928,9 +928,22 @@ namespace KWShared{
         return result;
     }
 
-    KWTinyWebServer::KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations)
+    KWTinyWebServer::KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations, ThreadPool* tasker)
     {
-        this->__serverName = "Kiwiisco embeded server, version 0.0.0.0";
+        if (tasker != NULL)
+        {
+            cout << "using a custom tasker for httpserver" <<endl;
+            this->__tasks = tasker;
+        }
+        else
+            this->__tasks = new ThreadPool(10, 5);
+
+        this->__serverName = "Kiwiisco embeded server, version 0.2.0.0";
+        //                                                     | | | |
+        //                                                     | | | +----> Bugs fixes
+        //                                                     | | +------> Performance and algorithm improvments
+        //                                                     | +--------> New features
+        //                                                     +----------> Big changes, architecture changes and incompatibilities
         this->__port = port;
         this->__observer = observer;
         this->__filesLocations = filesLocations;

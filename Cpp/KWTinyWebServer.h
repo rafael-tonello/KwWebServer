@@ -109,7 +109,7 @@ namespace KWShared{
     class KWTinyWebServer
     {
         public:
-            KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations);
+            KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations, ThreadPool* tasker = NULL);
             virtual ~KWTinyWebServer();
 
             void sendWebSocketData(int client, char* data, int size, bool isText);
@@ -118,7 +118,7 @@ namespace KWShared{
             int __port;
             WebServerObserver *__observer;
             string __serverName;
-            ThreadPool * __tasks = new ThreadPool(10, 5);
+            ThreadPool * __tasks;
 
             void debug(string debug, bool forceFlush = false);
             long int getCurrDayMilisec();
