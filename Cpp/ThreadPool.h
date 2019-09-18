@@ -19,7 +19,7 @@ using namespace std;
 
 class ThreadPool {
 public:
-    ThreadPool(size_t threads, int priority_orNegativeToBackgorundPool_orZeroToDefault);
+    ThreadPool(size_t threads, int priority_orNegativeToBackgorundPool_orZeroToDefault, string name_max_15chars = "");
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
     // the task queue
@@ -30,7 +30,9 @@ public:
     string tag;
 private:
     // need to keep track of threads so we can join them
-    std::vector< std::thread > workers;
+    std::vector<std::thread > workers;
+
+    std::vector<string>threadNames;
 
 
     std::queue< std::function<void()> > tasks;
@@ -39,59 +41,6 @@ private:
     std::condition_variable condition;
     bool stop;
 };
-
-// the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads, int priority_orNegativeToBackgorundPool_orZeroToDefault):stop(false)
-{
-    for(size_t i = 0;i<threads;++i)
-    {
-        workers.emplace_back(
-            [this]
-            {
-                for(;;)
-                {
-                    std::function<void()> task;
-
-                    {
-                        std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock, [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
-                            return;
-
-                        task = std::move(this->tasks.front());
-                        this->tasks.pop();
-                    }
-
-                    task();
-                    this->tasksCounter--;
-                }
-            }
-        );
-
-        if (priority_orNegativeToBackgorundPool_orZeroToDefault != 0)
-        {
-            //https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_MRG/1.3/html/Realtime_Reference_Guide/chap-Realtime_Reference_Guide-Priorities_and_policies.html
-            int policy;
-            sched_param sch;
-            pthread_getschedparam(workers.back().native_handle(), &policy, &sch);
-            sch.sched_priority = priority_orNegativeToBackgorundPool_orZeroToDefault;
-
-            if (priority_orNegativeToBackgorundPool_orZeroToDefault > 0)
-            {
-                if (pthread_setschedparam(workers.back().native_handle(), SCHED_FIFO, &sch)) {
-                    std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
-                }
-            }
-            else
-            {
-                cout << "Extreme low priority pool created." << endl;
-                if (pthread_setschedparam(workers.back().native_handle(), SCHED_IDLE, &sch)) {
-                    std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
-                }
-            }
-        }
-    }
-}
 
 // add new work item to the pool
 template<class F, class... Args> auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
@@ -118,20 +67,4 @@ template<class F, class... Args> auto ThreadPool::enqueue(F&& f, Args&&... args)
     return res;
 }
 
-// the destructor joins all threads
-inline ThreadPool::~ThreadPool()
-{
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-        worker.join();
-}
-
-inline int ThreadPool::getTaskCount()
-{
-    return this->tasksCounter;
-}
 #endif
