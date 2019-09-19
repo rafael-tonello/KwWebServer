@@ -936,7 +936,7 @@ namespace KWShared{
             this->__tasks = tasker;
         }
         else
-            this->__tasks = new ThreadPool(10, 5, "KwWebServerTasks");
+            this->__tasks = new ThreadPool(0, 0, "KWBSrvrTsks");
 
         this->__serverName = "Kiwiisco embeded server, version 0.2.0.0";
         //                                                     | | | |

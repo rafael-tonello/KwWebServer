@@ -16,19 +16,25 @@
 #include <string.h>
 
 using namespace std;
+const int TP_AUTO = 0;
 
 class ThreadPool {
 public:
-    ThreadPool(size_t threads, int priority_orNegativeToBackgorundPool_orZeroToDefault, string name_max_15chars = "");
+    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "");
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
     // the task queue
     ~ThreadPool();
-
     int getTaskCount();
-    int tasksCounter = 0;
+
+
     string tag;
 private:
+    string threadsNames;
+    int tasksCounter = 0;
+    int threadCount = 0;
+    int maxThreads = 0;
+    int poolPriority = 0;
     // need to keep track of threads so we can join them
     std::vector<std::thread > workers;
 
@@ -40,6 +46,7 @@ private:
     std::mutex queue_mutex;
     std::condition_variable condition;
     bool stop;
+    void NewThread();
 };
 
 // add new work item to the pool
@@ -64,6 +71,11 @@ template<class F, class... Args> auto ThreadPool::enqueue(F&& f, Args&&... args)
     condition.notify_one();
 
     this->tasksCounter++;
+
+    if ((this->tasksCounter > this->threadCount && this->maxThreads == TP_AUTO) || this->threadCount == 0)
+    {
+        this->NewThread();
+    }
     return res;
 }
 
