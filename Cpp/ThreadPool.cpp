@@ -33,6 +33,7 @@ void ThreadPool::NewThread()
                 }
 
                 task();
+                this->doneTasks++;
                 this->tasksCounter--;
             }
         }
@@ -83,6 +84,11 @@ void ThreadPool::NewThread()
     this->threadCount++;
 }
 
+int ThreadPool::getTotalDoneTasks()
+{
+    return this->doneTasks;
+}
+
 
 
 // the destructor joins all threads
@@ -99,5 +105,6 @@ ThreadPool::~ThreadPool()
 
 int ThreadPool::getTaskCount()
 {
-    return this->tasksCounter;
+    //return this->tasksCounter;
+    return this->tasks.size();
 }
