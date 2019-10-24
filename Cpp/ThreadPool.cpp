@@ -15,6 +15,7 @@ ThreadPool::ThreadPool(int threads, int priority_orNegativeToBackgorundPool_orZe
 
 void ThreadPool::NewThread()
 {
+    this->newThreadMutex.lock();
     std::thread tmpThread(
         [&]()
         {
@@ -50,6 +51,7 @@ void ThreadPool::NewThread()
             tmpName = tmpName.substr(0, 15);
 
         pthread_setname_np(tmpThread.native_handle(), tmpName.c_str());
+
     }
 
     if (this->poolPriority != 0)
@@ -79,8 +81,12 @@ void ThreadPool::NewThread()
     //workers.back().detach();
     tmpThread.detach();
     //workers.push_back(tmpThread);
+    //cout << "Create the thread " <<  this->threadsNames << this->threadCount << endl;
 
     this->threadCount++;
+
+    this->newThreadMutex.unlock();
+
 }
 
 
