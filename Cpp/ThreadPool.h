@@ -20,7 +20,7 @@ const int TP_AUTO = 0;
 
 class ThreadPool {
 public:
-    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "");
+    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "", bool forceThreadCreationAtStartup = false);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
     // the task queue
@@ -42,7 +42,7 @@ private:
     //this variable is used to determine if new trheads mus be created...
     //If buffer conains 100 tasks, and only 9 threads is running, a new must be created
     //this variable only works if the maxThread is 0 (automatic number of threads)
-    int tasksByThread = 10;
+    int bufferSizeBeforeNewThreads = 10;
     // need to keep track of threads so we can join them
     std::vector<std::thread > workers;
 
@@ -80,10 +80,21 @@ template<class F, class... Args> auto ThreadPool::enqueue(F&& f, Args&&... args)
 
     this->tasksCounter++;
 
-    int currentThreadDemand = ((int)(this->tasksCounter/this->tasksByThread))+1;
 
 
-    if ((this->threadCount < currentThreadDemand && this->maxThreads == TP_AUTO) || this->threadCount == 0)
+    if
+    (
+        (
+            this->threadCount == 0
+        ) ||
+        (
+            this->tasksCounter > this->bufferSizeBeforeNewThreads &&
+            (
+                this->threadCount < this->maxThreads ||
+                this->maxThreads == TP_AUTO
+            )
+        )
+    )
     {
         this->NewThread();
     }

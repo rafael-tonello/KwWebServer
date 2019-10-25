@@ -1,15 +1,18 @@
 #include "ThreadPool.h"
 
 // the constructor just launches some amount of workers
-ThreadPool::ThreadPool(int threads, int priority_orNegativeToBackgorundPool_orZeroToDefault, string name_max_15chars):stop(false)
+ThreadPool::ThreadPool(int threads, int priority_orNegativeToBackgorundPool_orZeroToDefault, string name_max_15chars, bool forceThreadCreationAtStartup):stop(false)
 {
     this->threadsNames = name_max_15chars;
     this->maxThreads = threads;
     this->poolPriority = priority_orNegativeToBackgorundPool_orZeroToDefault;
-    for(int i = 0;i<threads;++i)
+
+    if(forceThreadCreationAtStartup)
     {
-        //workers.emplace_back(
-        this->NewThread();
+        for(int i = 0;i<threads;++i)
+        {
+            this->NewThread();
+        }
     }
 }
 
