@@ -26,6 +26,7 @@ public:
     // the task queue
     ~ThreadPool();
     int getTaskCount();
+    int getTotalDoneTasks();
 
     std::mutex newThreadMutex;
 
@@ -33,6 +34,7 @@ public:
     string tag;
 private:
     string threadsNames;
+    unsigned int doneTasks = 0;
     int tasksCounter = 0;
     int threadCount = 0;
     int maxThreads = 0;
