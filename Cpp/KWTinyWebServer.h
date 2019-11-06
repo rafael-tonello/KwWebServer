@@ -42,58 +42,16 @@
 #include "ThreadPool.h"
 #include<sys/time.h>
 
+#include "SysLink.h"
+#include "HttpData.h"
+#include "StringUtils.h"
+#include "IWorker.h"
+#include "CookieParser.h"
+#include "HttpSession.h"
+
+
 namespace KWShared{
     using namespace std;
-
-    class SysLink
-    {
-        private:
-            vector<string> split(string* text, char sep);
-            vector<string> getObjectsFromDirectory(string directoryName, string lsFilter, string grepArguments);
-        public:
-            //file system
-            bool fileExists(string filename);
-            bool deleteFile(string filename);
-            bool writeFile(string filename, string data);
-            bool appendFile(string filename, string data);
-            string readFile(string filename);
-            void readFile(string filename, char* buffer, unsigned long start, unsigned long count);
-            unsigned long getFileSize(string filename);
-            bool waitAndLockFile(string filename, int maxTimeout = 1000);
-            bool unlockFile(string filename);
-            bool directoryExists(string directoryName);
-            bool createDirectory(string directoryName);
-            vector<string> getFilesFromDirectory(string directoryName, string searchPatern);
-            vector<string> getDirectoriesFromDirectory(string directoryName, string searchPatern);
-            bool deleteDirectory(string directoryName);
-            string getFileName(string path);
-            string getDirectoryName(string path);
-
-            //misc
-            void sleep_ms(unsigned int ms);
-    };
-
-    class HttpData{
-        public:
-            int client;
-            string resource;
-            string method;
-            string contentType;
-            char* contentBody = NULL;
-            unsigned int contentLength = 0;
-            vector< vector<string> > headers;
-            unsigned int httpStatus;
-            string httpMessage;
-
-            void setContentString(string data)
-            {
-                this->contentBody = new char[data.size()];
-                for (int cont = 0; cont < data.size(); cont++)
-                    this->contentBody[cont] = data[cont];
-
-                this->contentLength = data.size();
-            }
-    };
 
     //typedef void (*OnClientDataSend)(HttpData* in, HttpData* out);
 
@@ -109,7 +67,14 @@ namespace KWShared{
     class KWTinyWebServer
     {
         public:
-            KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations, ThreadPool* tasker = NULL);
+            KWTinyWebServer(
+                int port,
+                WebServerObserver *observer,
+                vector<string> filesLocations,
+                string dataFolder = "_AUTO_DEFINE_",
+                ThreadPool* tasker = NULL
+            );
+
             virtual ~KWTinyWebServer();
 
             void sendWebSocketData(int client, char* data, int size, bool isText);
@@ -121,22 +86,20 @@ namespace KWShared{
             ThreadPool * __tasks;
 
             void debug(string debug, bool forceFlush = false);
-            long int getCurrDayMilisec();
-        private:
-            vector<string> __filesLocations;
+            long int
+            getCurrDayMilisec();
+            vector<IWorker*> workers = {
+                new CookieParser()
+            };
 
+            string getDataFolder(){ return this->__dataFolder; }
+        private:
+            string __dataFolder;
+            vector<string> __filesLocations;
             pthread_t ThreadAwaitClients;
             SysLink sysLink;
     };
 
-    class StringUtils
-    {
-        public:
-            StringUtils();
-
-            void split(string str,string sep, vector<string> *result);
-            string toUpper(string source);
-    };
 
 
     using namespace std;
@@ -152,3 +115,4 @@ namespace KWShared{
 
 }
 #endif
+
