@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <iostream>
 
 
 namespace KWShared{
@@ -14,6 +15,11 @@ namespace KWShared{
         public:
             HttpCookie(string key = "", string value = ""){this->key = key; this->value = value;}
             HttpCookie(HttpCookie* copyFrom){
+                this->copyFrom(copyFrom);
+            }
+
+            void copyFrom(HttpCookie* copyFrom)
+            {
                 this->key = copyFrom->key;
                 this->value = copyFrom->value;
                 this->maxAgeSeconds = copyFrom->maxAgeSeconds;
@@ -28,8 +34,8 @@ namespace KWShared{
 
             void clear()
             {
-                this->key.clear();
-                this->value.clear();
+                this->key = "";
+                this->value = "";
                 this->secure = false;
                 this->httpOnly = false;
                 this->maxAgeSeconds = 0;
@@ -61,7 +67,7 @@ namespace KWShared{
 
                 for (auto &c: this->cookies)
                 {
-                    delete[] c.second;
+                    delete c.second;
                 }
                 this->cookies.clear();
             };

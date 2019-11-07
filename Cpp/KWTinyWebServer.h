@@ -47,8 +47,9 @@
 #include "StringUtils.h"
 #include "IWorker.h"
 #include "CookieParser.h"
-#include "HttpSession.h"
-
+#include <libgen.h>
+#include <unistd.h>
+#include <limits.h>
 
 namespace KWShared{
     using namespace std;
@@ -93,10 +94,12 @@ namespace KWShared{
             };
 
             string getDataFolder(){ return this->__dataFolder; }
+            StringUtils _strUtils;
         private:
             string __dataFolder;
             vector<string> __filesLocations;
             pthread_t ThreadAwaitClients;
+            string get_app_path();
             SysLink sysLink;
     };
 
@@ -106,12 +109,6 @@ namespace KWShared{
 
 
     enum States {AWAIT_HTTP_FIRST_LINE, READING_HEADER, AWAIT_CONTENT, SEND_REQUEST_TO_APP, SEND_RESPONSE, FINISH_REQUEST, FINISHED, ERROR_400_BADREQUEST, ERROR_500_INTERNALSERVERERROR};
-
-
-    static const std::string base64_chars ="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    typedef unsigned char BYTE;
-
-
 
 }
 #endif

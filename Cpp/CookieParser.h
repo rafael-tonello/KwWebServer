@@ -3,13 +3,12 @@
 
 #include "IWorker.h"
 #include "StringUtils.h"
-
+#include <iostream>
 namespace KWShared{
+    using namespace std;
     class CookieParser: public IWorker
     {
         public:
-            CookieParser();
-            virtual ~CookieParser();
 
             void load(HttpData* httpData){
                 string headerUpper;
@@ -20,11 +19,13 @@ namespace KWShared{
                     headerUpper = this->strUtils.toUpper((httpData->headers[i][0]));
                     if (headerUpper == "COOKIE")
                     {
+
                         //void split(string str,string sep, vector<string> *result);
                         this->strUtils.split(httpData->headers[i][1], ";", &temp1);
 
                         for (auto &currKeyValue: temp1)
                         {
+
                             //checks for a valid keyValue pair
                             auto equalPos = currKeyValue.find("=");
                             if (equalPos != string::npos)
@@ -33,12 +34,16 @@ namespace KWShared{
                                 tempKey = this->strUtils.toLower(currKeyValue.substr(0, equalPos));
                                 tempValue = currKeyValue.substr(equalPos+1);
 
-                                //save cookie in the httpData object
+                                //trim key and value
+                                this->strUtils.trim(tempKey);
+                                this->strUtils.trim(tempValue);
 
-                                if (httpData->cookies.find(tempKey) == httpData->cookies.end())
+                                //save cookie in the httpData object
+                                if (!httpData->cookies.count(tempKey))
                                 {
                                     httpData->cookies[tempKey] = new HttpCookie();
                                 }
+                                else
 
                                 httpData->cookies[tempKey]->key = tempKey;
                                 httpData->cookies[tempKey]->value = tempValue;
@@ -52,7 +57,7 @@ namespace KWShared{
                 string tempCookieData = "";
                 for (auto & curr: httpData->cookies)
                 {
-                    tempCookieData = curr.second->key + "=" + curr.second->value;
+                    tempCookieData = curr.second->key + string("=") + curr.second->value;
 
                     if (curr.second->maxAgeSeconds > 0)
                         tempCookieData += "; Max-Age=" + curr.second->maxAgeSeconds;
@@ -63,7 +68,6 @@ namespace KWShared{
                     if (curr.second->httpOnly == true)
                         tempCookieData += "; HttpOnly";
 
-
                     httpData->headers.push_back({"Set-Cookie", tempCookieData});
                 }
             }
@@ -72,19 +76,7 @@ namespace KWShared{
 
         private:
             StringUtils strUtils;
-            string formatDate (time_t dateAndTime)
-            {
-                //time_t currentTime;
-                //time(&currentTime)
-               char buffer[50];
-               //Wed, 21 Oct 2015 07:28:00 GMT;
-               struct tm* gmt = gmtime(&dateAndTime);
 
-               strftime(buffer, 50, "%a, %d %b %Y %H:%M%S GMT\0", gmt);
-               string ret(buffer);
-
-               return ret;
-            }
     };
 }
 #endif // COOKIEPARSER_H

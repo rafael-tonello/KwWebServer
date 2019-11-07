@@ -14,8 +14,6 @@ namespace KWShared{
     bool SetSocketBlockingEnabled(int fd, bool blocking);
     void addStringToCharList(vector<char> *destination, string *source, char*source2, int source2Length = -1);
     bool __SocketIsConnected( int socket);
-    unsigned char* base64_decode(std::string const& encoded_string);
-	std::string base64_encode(unsigned char * buf, unsigned int bufLen);
 	string getFileETag(string fileName);
 
 	KWTinyWebServer::~KWTinyWebServer()
@@ -300,7 +298,7 @@ namespace KWShared{
 
                 unsigned char sha1result[SHA_DIGEST_LENGTH];
                 SHA1((unsigned char*)concat.c_str(), concat.size(), sha1result);
-                string secWebSocketBase64 = base64_encode(sha1result, SHA_DIGEST_LENGTH);
+                string secWebSocketBase64 = self->_strUtils.base64_encode(sha1result, SHA_DIGEST_LENGTH);
 
 
 
@@ -374,21 +372,24 @@ namespace KWShared{
 
 					//try ausendFiles
 					self->__TryAutoLoadFiles(&receivedData, &dataToSend);
-
 					//notify workers
-					for (auto &curr: this->workers)
-                        curr.onload();
+					for (auto &curr: self->workers)
+                        curr->load(&receivedData);
 
                     //copy cookies and session data from receivedData to dataToSend
                     for (auto &curr: receivedData.cookies)
-                        dataToSend.cookies.add(new httpCookie(&curr));
+                    {
+                        if (dataToSend.cookies.find(curr.first) != dataToSend.cookies.end())
+                            dataToSend.cookies[curr.first]->copyFrom(curr.second);
+                        else
+                            dataToSend.cookies[curr.first] = new HttpCookie(curr.second);
+                    }
 
 					self->__observer->OnHttpRequest(&receivedData, &dataToSend);
 
 					//clear used data
 					delete[] receivedData.contentBody;
 					receivedData.contentBody = NULL;
-
 					//mount response and send to client;
 					tempIndStrConvert = new char[10];
 
@@ -399,19 +400,21 @@ namespace KWShared{
 						dataToSend.contentLength = 0;
 					}
 
-					for (auto &curr: this->workers)
-                        curr.onunload();
+					for (auto &curr: self->workers)
+					{
+                        curr->unload(&dataToSend);
+                    }
+
 
 					state = SEND_RESPONSE;
                 break;
                 case SEND_RESPONSE:
-
+                    cout << " will send an http respnse" << endl;
 					temp = "HTTP/1.1 "; temp.append(std::to_string(dataToSend.httpStatus)); temp.append(" "); temp.append(dataToSend.httpMessage); temp.append("\r\n");
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
 
 					temp = "Server: "+self->__serverName+"\r\n";
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
-
 					if (dataToSend.contentLength > 0)
 					{
 						temp = "Content-Type: "+dataToSend.contentType+";charset=utf-8\r\n";
@@ -423,7 +426,6 @@ namespace KWShared{
 						temp = "Content-Length: "; temp.append(std::to_string(dataToSend.contentLength)); temp.append("\r\n");
                         addStringToCharList(&rawBuffer, &temp, NULL, -1);
 					}
-
 					//add custom headers
 					for (unsigned int cont = 0; cont < dataToSend.headers.size(); cont++)
 					{
@@ -435,6 +437,7 @@ namespace KWShared{
 						}
 					}
 
+					cout << " will send an http respnse2" << endl;
 					//add end of header line break
 					temp = "\r\n";
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
@@ -467,6 +470,7 @@ namespace KWShared{
 						}
 					//}
 
+					cout << " will send an http respnse 3" << endl;
 					rawBuffer.clear();
 
 					//clear data
@@ -848,99 +852,6 @@ namespace KWShared{
 		pthread_exit(0);
 	}
 
-	std::string base64_encode(unsigned char * buf, unsigned int bufLen) {
-      std::string ret;
-      int i = 0;
-      int j = 0;
-      BYTE char_array_3[3];
-      BYTE char_array_4[4];
-
-      while (bufLen--) {
-        char_array_3[i++] = *(buf++);
-        if (i == 3) {
-          char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-          char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-          char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-          char_array_4[3] = char_array_3[2] & 0x3f;
-
-          for(i = 0; (i <4) ; i++)
-            ret += base64_chars[char_array_4[i]];
-          i = 0;
-        }
-      }
-
-      if (i)
-      {
-        for(j = i; j < 3; j++)
-          char_array_3[j] = '\0';
-
-        char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-        char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-        char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-        char_array_4[3] = char_array_3[2] & 0x3f;
-
-        for (j = 0; (j < i + 1); j++)
-          ret += base64_chars[char_array_4[j]];
-
-        while((i++ < 3))
-          ret += '=';
-      }
-
-      return ret;
-    }
-
-    string getFileETag(string fileName)
-    {
-        //calculates a ETAG using file last modification
-
-    }
-
-    unsigned char* base64_decode(std::string const& encoded_string) {
-      int in_len = encoded_string.size();
-      int i = 0;
-      int j = 0;
-      int in_ = 0;
-      BYTE char_array_4[4], char_array_3[3];
-      std::vector<BYTE> ret;
-
-      while (in_len-- && ( encoded_string[in_] != '=') /*&& is_base64(encoded_string[in_])*/) {
-        char_array_4[i++] = encoded_string[in_]; in_++;
-        if (i ==4) {
-          for (i = 0; i <4; i++)
-            char_array_4[i] = base64_chars.find(char_array_4[i]);
-
-          char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-          char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-          char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-          for (i = 0; (i < 3); i++)
-              ret.push_back(char_array_3[i]);
-          i = 0;
-        }
-      }
-
-      if (i) {
-        for (j = i; j <4; j++)
-          char_array_4[j] = 0;
-
-        for (j = 0; j <4; j++)
-          char_array_4[j] = base64_chars.find(char_array_4[j]);
-
-        char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-        char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-        for (j = 0; (j < i - 1); j++) ret.push_back(char_array_3[j]);
-      }
-
-      //return ret;
-      unsigned char* result = new unsigned char[ret.size()];
-      for (int c = 0; c < ret.size(); c++)
-        result[c] = ret[c];
-
-        return result;
-    }
-
     KWTinyWebServer::KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations, string dataFolder, ThreadPool* tasker)
     {
         if (tasker != NULL)
@@ -951,7 +862,7 @@ namespace KWShared{
         else
             this->__tasks = new ThreadPool(0, 0, "KWBSrvrTsks");
 
-        if (dataFolder = "_AUTO_DEFINE_")
+        if (dataFolder == "_AUTO_DEFINE_" || dataFolder == "")
         {
             dataFolder = string(dirname((char*)(get_app_path().c_str()))) + "/data";
             if (!this->sysLink.directoryExists(dataFolder))
@@ -1017,7 +928,7 @@ namespace KWShared{
                 time = gmtime(&(attrib.st_mtime));
                 strftime(dtStr, 256, "%a, %d %b %Y %T GMT", time);
                 string lastModificationTime(dtStr);
-                string ETag = base64_encode((unsigned char*)lastModificationTime.c_str(), lastModificationTime.size());
+                string ETag = this->_strUtils.base64_encode((unsigned char*)lastModificationTime.c_str(), lastModificationTime.size());
 
                 //checks if browseris just browser is just checking by modifications in the resource
                 string ifNoneMatchHeader = "";
@@ -1178,6 +1089,19 @@ namespace KWShared{
 
         return temp.tv_sec * 1000 + temp.tv_usec/1000;
     }
+
+    string KWTinyWebServer::get_app_path( )
+    {
+        char arg1[200];
+        char exepath[PATH_MAX + 1] = {0};
+
+        sprintf( arg1, "/proc/%d/exe", getpid() );
+        readlink( arg1, exepath, 1024 );
+        return string( exepath );
+    }
+
+
+
 
 
 }
