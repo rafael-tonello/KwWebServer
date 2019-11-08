@@ -10,22 +10,27 @@ namespace KWShared{
     {
         public:
 
+            void start(void* webserver){};
             void load(HttpData* httpData){
+                /*this worker scrolls throught the headers of the httpData object and looks for
+                cookies information and uses this information to populate the 'cookies' property of the'
+                httpData*/
+
                 string headerUpper;
                 vector<string> temp1;
                 string tempKey, tempValue;
+                //pass over all headers
                 for (auto i = 0; i < httpData->headers.size(); i++)
                 {
                     headerUpper = this->strUtils.toUpper((httpData->headers[i][0]));
+                    //checks if the current hreader is a cookie information
                     if (headerUpper == "COOKIE")
                     {
-
                         //void split(string str,string sep, vector<string> *result);
                         this->strUtils.split(httpData->headers[i][1], ";", &temp1);
 
                         for (auto &currKeyValue: temp1)
                         {
-
                             //checks for a valid keyValue pair
                             auto equalPos = currKeyValue.find("=");
                             if (equalPos != string::npos)

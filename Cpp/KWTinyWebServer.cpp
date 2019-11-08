@@ -58,7 +58,7 @@ namespace KWShared{
 	   if (fd < 0) return false;
 
 		#ifdef _WIN32
-		   unsigned long mode = blocking ? 0 : 1;
+		   unsigned long modworker->start(this);e = blocking ? 0 : 1;
 		   return (ioctlsocket(fd, FIONBIO, &mode) == 0) ? true : false;
 		#else
 		   int flags = fcntl(fd, F_GETFL, 0);
@@ -132,7 +132,6 @@ namespace KWShared{
 				break;
 			}
 		}
-
 		//set read timeout
 		struct timeval tv;
 		tv.tv_sec  = 10;
@@ -320,10 +319,11 @@ namespace KWShared{
                 //create a new thread to work with the web socket connection
                 pthread_t *thWebSocketProcess = new pthread_t;
                 void **tmp = new void*[4];
+                HttpData* cl = new HttpData(receivedData);
                 tmp[0] = self;
                 tmp[1] = &client;
                 tmp[2] = thWebSocketProcess;
-				tmp[3] = &receivedData.resource;
+				tmp[3] = cl;
 
                 pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
 
@@ -373,7 +373,7 @@ namespace KWShared{
 					//try ausendFiles
 					self->__TryAutoLoadFiles(&receivedData, &dataToSend);
 					//notify workers
-					for (auto &curr: self->workers)
+					for (auto &curr: self->__workers)
                         curr->load(&receivedData);
 
                     //copy cookies and session data from receivedData to dataToSend
@@ -400,7 +400,7 @@ namespace KWShared{
 						dataToSend.contentLength = 0;
 					}
 
-					for (auto &curr: self->workers)
+					for (auto &curr: self->__workers)
 					{
                         curr->unload(&dataToSend);
                     }
@@ -409,7 +409,6 @@ namespace KWShared{
 					state = SEND_RESPONSE;
                 break;
                 case SEND_RESPONSE:
-                    cout << " will send an http respnse" << endl;
 					temp = "HTTP/1.1 "; temp.append(std::to_string(dataToSend.httpStatus)); temp.append(" "); temp.append(dataToSend.httpMessage); temp.append("\r\n");
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
 
@@ -437,7 +436,6 @@ namespace KWShared{
 						}
 					}
 
-					cout << " will send an http respnse2" << endl;
 					//add end of header line break
 					temp = "\r\n";
 					addStringToCharList(&rawBuffer, &temp, NULL, -1);
@@ -470,7 +468,6 @@ namespace KWShared{
 						}
 					//}
 
-					cout << " will send an http respnse 3" << endl;
 					rawBuffer.clear();
 
 					//clear data
@@ -613,7 +610,8 @@ namespace KWShared{
 		KWTinyWebServer *self = (KWTinyWebServer*)params[0];
 		int client = *((int*)(params[1]));
 		pthread_t *thTalkWithClient = (pthread_t*)(params[2]);
-		string resource = string(((string*)params[3])->c_str());
+		HttpData *request = (HttpData*)params[3];
+		string resource = request->resource;
 
 		params = NULL;
 
@@ -645,7 +643,7 @@ namespace KWShared{
         WS_STATES state = WS_READING_PACK_INFO_1;
 
         usleep(2000000);
-        self->__observer->OnWebSocketConnect(client, resource);
+        self->__observer->OnWebSocketConnect(request, resource);
 
 		while ((state != WS_FINISHED) && (__SocketIsConnected(client)))
 		{
@@ -797,7 +795,7 @@ namespace KWShared{
                                     payloadSizes.clear();
                                     //send payload to application
 
-                                    self->__observer->OnWebSocketData(client, resource, fullPayload, totalPayload);
+                                    self->__observer->OnWebSocketData(request, resource, fullPayload, totalPayload);
 
                                     //clear payload buffers
                                     delete[] fullPayload;
@@ -844,7 +842,7 @@ namespace KWShared{
             }
 		}
 
-		self->__observer->OnWebSocketDisconnect(client, resource);
+		self->__observer->OnWebSocketDisconnect(request, resource);
 
 		close(client);
 
@@ -864,10 +862,13 @@ namespace KWShared{
 
         if (dataFolder == "_AUTO_DEFINE_" || dataFolder == "")
         {
-            dataFolder = string(dirname((char*)(get_app_path().c_str()))) + "/data";
+            dataFolder = string(dirname((char*)(get_app_path().c_str()))) + "/data/www_data";
+
             if (!this->sysLink.directoryExists(dataFolder))
                 this->sysLink.createDirectory(dataFolder);
         }
+        if (this->__dataFolder.size() > 0 && this->__dataFolder[this->__dataFolder.size()-1] != '/')
+            this->__dataFolder += '/';
 
         this->__dataFolder = dataFolder;
 
@@ -886,6 +887,10 @@ namespace KWShared{
            WSADATA wsaData;
            WSAStartup(vers ionWanted, &wsaData);
         #endif
+
+        //start internal workers
+        for (auto &curr: this->__workers)
+            curr->start(this);
 
         pthread_create(&(this->ThreadAwaitClients), NULL, ThreadWaitClients, this);
     }
@@ -1074,6 +1079,11 @@ namespace KWShared{
 
     }
 
+    void KWTinyWebServer::sendWebSocketData(HttpData *originalRequest, char* data, int size, bool isText)
+    {
+        this->sendWebSocketData(originalRequest->client, data, size, isText);
+    }
+
 	void KWTinyWebServer::debug(string debugMessage, bool forceFlush)
 	{
         cout << "WebServer: " << debugMessage << endl;
@@ -1100,8 +1110,10 @@ namespace KWShared{
         return string( exepath );
     }
 
-
-
-
+    void KWTinyWebServer::addWorker(IWorker* worker)
+    {
+        this->__workers.push_back(worker);
+        worker->start(this);
+    }
 
 }

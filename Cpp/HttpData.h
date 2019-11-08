@@ -51,6 +51,35 @@ namespace KWShared{
 
     class HttpData{
         public:
+            HttpData(){}
+            HttpData(HttpData* copyFrom){
+                this->copyFrom(copyFrom);
+            }
+
+            void copyFrom(HttpData* toCopy)
+            {
+                this->clear();
+                this->client = toCopy->client;
+                this->resource = toCopy->resource;
+                this->method = toCopy->method;
+                this->contentType = toCopy->contentType;
+                this->contentLength = toCopy->contentLength;
+                this->httpStatus = toCopy->httpStatus;
+                this->httpMessage = toCopy->httpMessage;
+
+                for (auto &c: toCopy->headers)
+                    this->headers.push_back({c[0], c[1]});
+
+                for (auto &c: toCopy->cookies)
+                    this->cookies[c.first] = new HttpCookie(c.second);
+
+                char* contentBody = NULL;
+
+                this->contentBody = new char[this->contentLength];
+                for (unsigned int c = 0; c < this->contentLength; c++)
+                    this->contentBody[c] = toCopy->contentBody[c];
+            }
+
             ~HttpData()
             {
                 this->clear();

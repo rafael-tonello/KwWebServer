@@ -59,9 +59,9 @@ namespace KWShared{
     class WebServerObserver{
         public:
             virtual void OnHttpRequest(HttpData* in, HttpData* out) = 0;
-            virtual void OnWebSocketConnect(int client, string resource) = 0;
-            virtual void OnWebSocketData(int client, string resource, char* data, unsigned long long dataSize) = 0;
-            virtual void OnWebSocketDisconnect(int client, string resource) = 0;
+            virtual void OnWebSocketConnect(HttpData *originalRequest, string resource) = 0;
+            virtual void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize) = 0;
+            virtual void OnWebSocketDisconnect(HttpData *originalRequest, string resource) = 0;
     };
 
 
@@ -79,24 +79,28 @@ namespace KWShared{
             virtual ~KWTinyWebServer();
 
             void sendWebSocketData(int client, char* data, int size, bool isText);
+            void sendWebSocketData(HttpData *originalRequest, char* data, int size, bool isText);
 
             void __TryAutoLoadFiles(HttpData* in, HttpData* out);
             int __port;
             WebServerObserver *__observer;
             string __serverName;
+            string __dataFolder;
             ThreadPool * __tasks;
 
             void debug(string debug, bool forceFlush = false);
             long int
             getCurrDayMilisec();
-            vector<IWorker*> workers = {
-                new CookieParser()
-            };
+
 
             string getDataFolder(){ return this->__dataFolder; }
             StringUtils _strUtils;
+
+            void addWorker(IWorker* worker);
+            vector<IWorker*> __workers = {
+                new CookieParser()
+            };
         private:
-            string __dataFolder;
             vector<string> __filesLocations;
             pthread_t ThreadAwaitClients;
             string get_app_path();
