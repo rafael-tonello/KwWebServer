@@ -183,7 +183,7 @@ namespace KWShared{
 								{
 
 									receivedData.method = tempHeaderParts.at(0);
-									receivedData.resource =tempHeaderParts.at(1);
+									receivedData.resource = tempHeaderParts.at(1);
 									receivedData.contentLength = 0;
 								}
 								else

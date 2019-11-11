@@ -123,6 +123,14 @@ namespace KWShared{
 
                 this->contentLength = data.size();
             }
+
+            string getContentString(){
+                string ret = "";
+                for (unsigned int c = 0; c < this->contentBody; c++)
+                    ret += this->contentBody[c];
+
+                return ret;
+            }
     };
 }
 
