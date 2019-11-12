@@ -993,6 +993,8 @@ namespace KWShared{
                         out->headers.push_back({"ETag", ETag});
                         //set the ETag header
                     }
+                    out->httpStatus = 200;
+                    out->httpMessage = "Ok";
                 }
                 else
                 {
@@ -1009,7 +1011,12 @@ namespace KWShared{
             }
             else
             {
-                out->contentType = "notFound";
+                out->contentType = "";
+                out->httpStatus = 404;
+                out->httpMessage = "Not found";
+                out->contentLength = 0;
+
+
                 string t = "the file " + fName + "could not be found ";
                 debug(t);
             }
