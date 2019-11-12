@@ -242,7 +242,7 @@ namespace KWShared{
 									else
 									{
 										state = AWAIT_CONTENT;
-										receivedData.contentBody = new char[(rawBuffer.size() - contentStart)+1];
+										receivedData.contentBody = new char[receivedData.contentLength+1];
 										receivedData.contentBody[(rawBuffer.size() - contentStart)] = 0;
 										currentContentLength = 0;
 									}
@@ -363,6 +363,7 @@ namespace KWShared{
 			switch(state)
 			{
 				case SEND_REQUEST_TO_APP:
+
                     //set current time in the response
                     t = time(0);
                     timep = gmtime(&t);
@@ -388,8 +389,7 @@ namespace KWShared{
 					self->__observer->OnHttpRequest(&receivedData, &dataToSend);
 
 					//clear used data
-					delete[] receivedData.contentBody;
-					receivedData.contentBody = NULL;
+
 					//mount response and send to client;
 					tempIndStrConvert = new char[10];
 

@@ -96,6 +96,7 @@ namespace KWShared{
 
                 for (auto &c: this->cookies)
                 {
+                    //c.second->clear();
                     delete c.second;
                 }
                 this->cookies.clear();
@@ -121,14 +122,18 @@ namespace KWShared{
                 for (int cont = 0; cont < data.size(); cont++)
                     this->contentBody[cont] = data[cont];
 
+
                 this->contentLength = data.size();
             }
 
-            string getContentString(){
+            string getContentString()
+            {
                 string ret = "";
-                for (unsigned int c = 0; c < this->contentBody; c++)
-                    ret += this->contentBody[c];
+                for (auto cont = 0; cont < this->contentLength; cont++)
+                    ret += this->contentBody[cont];
 
+                char endOfString = 0;
+                ret += endOfString;
                 return ret;
             }
     };
