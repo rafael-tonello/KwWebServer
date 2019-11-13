@@ -1,11 +1,43 @@
 #include "ThreadPool.h"
 
 // the constructor just launches some amount of workers
-ThreadPool::ThreadPool(int threads, int priority_orNegativeToBackgorundPool_orZeroToDefault, string name_max_15chars, bool forceThreadCreationAtStartup):stop(false)
+ThreadPool::ThreadPool(
+    int threads,
+    int priority_orNegativeToBackgorundPool_orZeroToDefault,
+    string name_max_15chars
+):stop(false)
 {
+    if (priority_orNegativeToBackgorundPool_orZeroToDefault < 0)
+        this->schedul_policy = SCHED_IDLE;
+    if (priority_orNegativeToBackgorundPool_orZeroToDefault > 0)
+        this->schedul_policy = SCHED_FIFO;
+
     this->threadsNames = name_max_15chars;
     this->maxThreads = threads;
     this->poolPriority = priority_orNegativeToBackgorundPool_orZeroToDefault;
+
+    /*if(forceThreadCreationAtStartup)
+    {
+        for(int i = 0;i<threads;++i)
+        {
+            this->NewThread();
+        }
+    }*/
+}
+
+ThreadPool::ThreadPool(
+    bool forceThreadCreationAtStartup,
+    int threads,
+    int priorityOrNicerValue,
+    int scheduling_policy,
+    string name_max_15chars
+):stop(false)
+{
+    this->schedul_policy = priorityOrNicerValue;
+
+    this->threadsNames = name_max_15chars;
+    this->maxThreads = threads;
+    this->poolPriority = priorityOrNicerValue;
 
     if(forceThreadCreationAtStartup)
     {
@@ -67,19 +99,12 @@ void ThreadPool::NewThread()
         sch.sched_priority = this->poolPriority;
 
 
-        if (this->poolPriority > 0)
-        {
-            if (pthread_setschedparam(tid, SCHED_FIFO, &sch)) {
-                std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
-            }
+        if (pthread_setschedparam(tid, this->schedul_policy, &sch)) {
+            std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
         }
-        else if (this->poolPriority  < 0)
-        {
+
+        if (this->schedul_policy == SCHED_IDLE)
             cout << "Extreme low priority pool created." << endl;
-            if (pthread_setschedparam(tid, SCHED_IDLE, &sch)) {
-                std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
-            }
-        }
     }
 
     //workers.back().detach();

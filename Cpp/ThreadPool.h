@@ -18,9 +18,17 @@
 using namespace std;
 const int TP_AUTO = 0;
 
+
+const int TST_REALTIME = SCHED_FIFO;
+const int TST_DEFAULT = SCHED_OTHER;
+const int TST_BACKGROUND = SCHED_IDLE;
+
+
 class ThreadPool {
 public:
-    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "", bool forceThreadCreationAtStartup = false);
+    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "");
+    ThreadPool(bool forceThreadCreationAtStartup, int threads = TP_AUTO, int priorityOrNicerValue = TP_AUTO, int scheduling_policy = SCHED_OTHER, string name_max_15chars = "");
+
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
     // the task queue
@@ -39,6 +47,7 @@ private:
     int threadCount = 0;
     int maxThreads = 0;
     int poolPriority = 0;
+    int schedul_policy = SCHED_OTHER;
     //this variable is used to determine if new trheads mus be created...
     //If buffer conains 100 tasks, and only 9 threads is running, a new must be created
     //this variable only works if the maxThread is 0 (automatic number of threads)
