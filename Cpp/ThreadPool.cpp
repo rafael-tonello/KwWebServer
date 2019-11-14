@@ -33,7 +33,7 @@ ThreadPool::ThreadPool(
     string name_max_15chars
 ):stop(false)
 {
-    this->schedul_policy = priorityOrNicerValue;
+    this->schedul_policy = scheduling_policy;
 
     this->threadsNames = name_max_15chars;
     this->maxThreads = threads;
