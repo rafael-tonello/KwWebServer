@@ -43,6 +43,8 @@ namespace KWShared{
                 string sha1Result = this->strUtils.base64_encode(sha1result, SHA_DIGEST_LENGTH);
 
                 sha1Result+= uniqueCount++;
+                sha1Result+="\0";
+
 
                 //return the SHA1 as result
                 return sha1Result;
@@ -81,6 +83,7 @@ namespace KWShared{
             }
 
             void unload(HttpData* httpData){
+
                 //find session object
                 JSON* session = this->getSessionData(httpData);
                 if (session != NULL)
@@ -108,6 +111,11 @@ namespace KWShared{
 
             JSON* getSessionData(HttpData* httpData)
             {
+                /*for (auto &c :httpData->cookies)
+                {
+                    cout << "get session cookie: " << c.first << "="<< c.second->value << endl;
+                }*/
+
                 //for securty, checks if exists a openes session corresponding to the 'ssid' cookie
                 if (httpData->cookies.find("ssid") != httpData->cookies.end())
                 {

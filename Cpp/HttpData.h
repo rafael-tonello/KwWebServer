@@ -71,7 +71,9 @@ namespace KWShared{
                     this->headers.push_back({c[0], c[1]});
 
                 for (auto &c: toCopy->cookies)
+                {
                     this->cookies[c.first] = new HttpCookie(c.second);
+                }
 
                 char* contentBody = NULL;
 

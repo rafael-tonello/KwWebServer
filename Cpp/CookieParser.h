@@ -37,7 +37,7 @@ namespace KWShared{
                             {
                                 //gets the key and the value of current cookie
                                 tempKey = this->strUtils.toLower(currKeyValue.substr(0, equalPos));
-                                tempValue = currKeyValue.substr(equalPos+1);
+                                tempValue = this->strUtils.toLower(currKeyValue.substr(equalPos+1));
 
                                 //trim key and value
                                 this->strUtils.trim(tempKey);
@@ -48,7 +48,6 @@ namespace KWShared{
                                 {
                                     httpData->cookies[tempKey] = new HttpCookie();
                                 }
-                                else
 
                                 httpData->cookies[tempKey]->key = tempKey;
                                 httpData->cookies[tempKey]->value = tempValue;
@@ -62,10 +61,12 @@ namespace KWShared{
                 string tempCookieData = "";
                 for (auto & curr: httpData->cookies)
                 {
-                    tempCookieData = curr.second->key + string("=") + curr.second->value;
+
+                    tempCookieData = curr.second->key + "=" + curr.second->value;
+
 
                     if (curr.second->maxAgeSeconds > 0)
-                        tempCookieData += "; Max-Age=" + curr.second->maxAgeSeconds;
+                        tempCookieData += "; Max-Age=" + std::to_string(curr.second->maxAgeSeconds);
 
                     if (curr.second->secure == true)
                         tempCookieData += "; Secure";

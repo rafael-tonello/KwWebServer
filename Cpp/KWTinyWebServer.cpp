@@ -119,6 +119,7 @@ namespace KWShared{
         time_t t;
         struct tm *timep;
         long int startTime = self->getCurrDayMilisec();
+        bool clearReceivedData = true;
 
 		//waiting for webkit
 
@@ -275,73 +276,12 @@ namespace KWShared{
 
 		}
 
-        //check if http request is an protocol change request
-        if (connection.find("UPGRADE") != string::npos && upgrade.find("WEBSOCKET") != string::npos)
-        {
-            //WEBSOCKET CONNECTION (START ANOTHER THREAD TO WORK WITH CONNECTIN, SEND ACCEPTANCE TO CLIENT AND EXTI FROM HTTP PARSING PROCESS)
-            string secWebSocketKey = "";
+		if (connection.find("UPGRADE") != string::npos && upgrade.find("WEBSOCKET") != string::npos)
+		{
 
-            //lock for SEC-WEBSOCKET-KEY key
-            for (auto &p : receivedData.headers)
-            {
-                if (p[0] == "SEC-WEBSOCKET-KEY")
-                    secWebSocketKey = p[1];
-            }
-
-
-            if (secWebSocketKey != "")
-            {
-                string concat = secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-
-
-                unsigned char sha1result[SHA_DIGEST_LENGTH];
-                SHA1((unsigned char*)concat.c_str(), concat.size(), sha1result);
-                string secWebSocketBase64 = self->_strUtils.base64_encode(sha1result, SHA_DIGEST_LENGTH);
-
-
-
-
-                //prepare the http response to client
-                dataToSend.httpStatus = 101;
-                dataToSend.httpMessage = "Switching Protocols";
-                dataToSend.headers.push_back({"Upgrade", "websocket"});
-                dataToSend.headers.push_back({"Connection", "Upgrade"});
-                dataToSend.headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
-
-                secWebSocketBase64.clear();
-                concat.clear();
-
-
-
-                state = SEND_RESPONSE;
-
-                //create a new thread to work with the web socket connection
-                pthread_t *thWebSocketProcess = new pthread_t;
-                void **tmp = new void*[4];
-                HttpData* cl = new HttpData(receivedData);
-                tmp[0] = self;
-                tmp[1] = &client;
-                tmp[2] = thWebSocketProcess;
-				tmp[3] = cl;
-
-                pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
-
-                letSocketOpen = true;
-
-                //this time must be enough to new thread be started. It's just a prediction, ensuring that the new thread
-                //has access to the current thread variables.
-                usleep(100000);
-
-            }
-            else
-                state = ERROR_400_BADREQUEST;
-
-
-        }
-        else{
-            dataToSend.headers.push_back({"Connection", "Close"});
-        }
+            dataToSend.httpStatus = 101;
+            receivedData.httpStatus = 101;
+		}
 
 		while ((state != FINISHED) && (__SocketIsConnected(client)))
 		{
@@ -372,7 +312,8 @@ namespace KWShared{
 
 
 					//try ausendFiles
-					self->__TryAutoLoadFiles(&receivedData, &dataToSend);
+					if (dataToSend.httpStatus != 101)
+                        self->__TryAutoLoadFiles(&receivedData, &dataToSend);
 					//notify workers
 					for (auto &curr: self->__workers)
                         curr->load(&receivedData);
@@ -406,7 +347,75 @@ namespace KWShared{
                     }
 
 
-					state = SEND_RESPONSE;
+					state = CHECK_PROTOCOL_CHANGE;
+                break;
+                case CHECK_PROTOCOL_CHANGE:
+                    state = SEND_RESPONSE;
+                    //check if http request is an protocol change request
+                    if (dataToSend.httpStatus == 101)
+                    {
+                        dataToSend.contentBody = new char[0];
+                        dataToSend.contentLength = 0;
+
+                        //WEBSOCKET CONNECTION (START ANOTHER THREAD TO WORK WITH CONNECTIN, SEND ACCEPTANCE TO CLIENT AND EXTI FROM HTTP PARSING PROCESS)
+                        string secWebSocketKey = "";
+
+                        //lock for SEC-WEBSOCKET-KEY key
+                        for (auto &p : receivedData.headers)
+                        {
+                            if (p[0] == "SEC-WEBSOCKET-KEY")
+                                secWebSocketKey = p[1];
+                        }
+
+
+                        if (secWebSocketKey != "")
+                        {
+                            string concat = secWebSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+
+
+                            unsigned char sha1result[SHA_DIGEST_LENGTH];
+                            SHA1((unsigned char*)concat.c_str(), concat.size(), sha1result);
+                            string secWebSocketBase64 = self->_strUtils.base64_encode(sha1result, SHA_DIGEST_LENGTH);
+
+
+
+
+                            //prepare the http response to client
+                            dataToSend.httpStatus = 101;
+                            dataToSend.httpMessage = "Switching Protocols";
+                            dataToSend.headers.push_back({"Upgrade", "websocket"});
+                            dataToSend.headers.push_back({"Connection", "Upgrade"});
+                            dataToSend.headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
+
+                            secWebSocketBase64.clear();
+                            concat.clear();
+
+                            //create a new thread to work with the web socket connection
+                            pthread_t *thWebSocketProcess = new pthread_t;
+                            void **tmp = new void*[4];
+                            HttpData* cl = new HttpData(&receivedData);
+                            tmp[0] = self;
+                            tmp[1] = &client;
+                            tmp[2] = thWebSocketProcess;
+                            tmp[3] = cl;
+
+                            pthread_create(thWebSocketProcess, NULL, WebSocketProcessThread, tmp);
+
+                            //clearReceivedData = false;
+                            letSocketOpen = true;
+
+                            //this time must be enough to new thread be started. It's just a prediction, ensuring that the new thread
+                            //has access to the current thread variables.
+                            usleep(100000);
+
+                        }
+                        else
+                            state = ERROR_400_BADREQUEST;
+                    }
+                    else{
+                        dataToSend.headers.push_back({"Connection", "Close"});
+                    }
                 break;
                 case SEND_RESPONSE:
 					temp = "HTTP/1.1 "; temp.append(std::to_string(dataToSend.httpStatus)); temp.append(" "); temp.append(dataToSend.httpMessage); temp.append("\r\n");
@@ -481,7 +490,9 @@ namespace KWShared{
 						dataToSend.contentBody = NULL;
 					}*/
 
-					receivedData.clear();
+					if (clearReceivedData == true)
+                        receivedData.clear();
+
 					dataToSend.clear();
 
 					state = FINISH_REQUEST;
@@ -503,6 +514,8 @@ namespace KWShared{
 
 		if (!letSocketOpen)
             close(client);
+        else
+            cout << "let socket open" << endl;
 
 
 		delete[] params;
@@ -845,6 +858,7 @@ namespace KWShared{
 		self->__observer->OnWebSocketDisconnect(request, resource);
 
 		close(client);
+		request->clear();
 
 		pthread_detach(*thTalkWithClient);
 		pthread_exit(0);

@@ -19,6 +19,7 @@ using namespace std;
 const int TP_AUTO = 0;
 
 
+//http://man7.org/linux/man-pages/man7/sched.7.html
 const int TST_REALTIME = SCHED_FIFO;
 const int TST_DEFAULT = SCHED_OTHER;
 const int TST_BACKGROUND = SCHED_IDLE;
