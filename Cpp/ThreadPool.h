@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <strings.h>
 #include <string.h>
+#include <unistd.h>
 
 using namespace std;
 const int TP_AUTO = 0;
@@ -24,11 +25,11 @@ const int TST_REALTIME = SCHED_FIFO;
 const int TST_DEFAULT = SCHED_OTHER;
 const int TST_BACKGROUND = SCHED_IDLE;
 
-
+//read this before use this class: https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_MRG/1.3/html/Realtime_Reference_Guide/chap-Realtime_Reference_Guide-Priorities_and_policies.html
 class ThreadPool {
 public:
-    ThreadPool(int threads = TP_AUTO, int priority_orNegativeToBackgorundPool_orZeroToDefault = TP_AUTO, string name_max_15chars = "");
-    ThreadPool(bool forceThreadCreationAtStartup, int threads = TP_AUTO, int priorityOrNicerValue = TP_AUTO, int scheduling_policy = SCHED_OTHER, string name_max_15chars = "");
+    ThreadPool(int threads = TP_AUTO, int niceValue = TP_AUTO, string name_max_15chars = "", bool forceThreadCreationAtStartup = false);
+    ThreadPool(bool forceThreadCreationAtStartup, int threads = TP_AUTO, int priorityOrNiceValue = TP_AUTO, int scheduling_policy = SCHED_OTHER, string name_max_15chars = "");
 
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;

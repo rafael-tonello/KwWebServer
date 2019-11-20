@@ -2,9 +2,9 @@
 #ifndef HTTPSESSION_H
 #define HTTPSESSION_H
 
-#include "../../libs.json_maker/cpp/JSON.h"
-#include "KWTinyWebServer.h"
-#include "IWorker.h"
+#include "../../../libs.json_maker/cpp/JSON.h"
+#include "../KWTinyWebServer.h"
+#include "../IWorker.h"
 
 
 namespace KWShared{

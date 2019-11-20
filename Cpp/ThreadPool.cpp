@@ -3,32 +3,42 @@
 // the constructor just launches some amount of workers
 ThreadPool::ThreadPool(
     int threads,
-    int priority_orNegativeToBackgorundPool_orZeroToDefault,
-    string name_max_15chars
+    int niceValue,
+    string name_max_15chars,
+    bool forceThreadCreationAtStartup
 ):stop(false)
 {
-    if (priority_orNegativeToBackgorundPool_orZeroToDefault < 0)
+    /*if (priority_orNegativeToBackgorundPool_orZeroToDefault < 0)
         this->schedul_policy = SCHED_IDLE;
     if (priority_orNegativeToBackgorundPool_orZeroToDefault > 0)
-        this->schedul_policy = SCHED_FIFO;
+        this->schedul_policy = SCHED_FIFO;*/
+
+    if (niceValue < -20)
+    {
+        this->schedul_policy = SCHED_IDLE;
+        niceValue = 0;
+    }
+    else{
+        this->schedul_policy = SCHED_OTHER;
+    }
 
     this->threadsNames = name_max_15chars;
     this->maxThreads = threads;
-    this->poolPriority = priority_orNegativeToBackgorundPool_orZeroToDefault;
+    this->poolPriority = niceValue;
 
-    /*if(forceThreadCreationAtStartup)
+    if(forceThreadCreationAtStartup)
     {
         for(int i = 0;i<threads;++i)
         {
             this->NewThread();
         }
-    }*/
+    }
 }
 
 ThreadPool::ThreadPool(
     bool forceThreadCreationAtStartup,
     int threads,
-    int priorityOrNicerValue,
+    int priorityOrNiceValue,
     int scheduling_policy,
     string name_max_15chars
 ):stop(false)
@@ -37,7 +47,7 @@ ThreadPool::ThreadPool(
 
     this->threadsNames = name_max_15chars;
     this->maxThreads = threads;
-    this->poolPriority = priorityOrNicerValue;
+    this->poolPriority = priorityOrNiceValue;
 
     if(forceThreadCreationAtStartup)
     {
@@ -98,9 +108,14 @@ void ThreadPool::NewThread()
         pthread_getschedparam(tid, &policy, &sch);
         sch.sched_priority = this->poolPriority;
 
-
-        if (pthread_setschedparam(tid, this->schedul_policy, &sch)) {
-            std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
+        if (this->schedul_policy != SCHED_OTHER)
+        {
+            if (pthread_setschedparam(tid, this->schedul_policy, &sch)) {
+                std::cout << "Failed to setschedparam: " << strerror(errno) << '\n';
+            }
+        }
+        else{
+            nice(this->poolPriority);
         }
 
         if (this->schedul_policy == SCHED_IDLE)
