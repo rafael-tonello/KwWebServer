@@ -664,7 +664,6 @@ namespace KWShared{
 
 			readCount = recv(client,readBuffer, sizeof(readBuffer), 0);
 
-
 			if (readCount > 0)
 			{
                 for (int cont = 0; cont < readCount ; cont++)
@@ -749,6 +748,7 @@ namespace KWShared{
                             }
                         break;
                         case WS_READ_64BIT_SIZE:
+
                             ((char*)&packSize)[tempIndex++] = curr;
                             if (tempIndex == 4)
                             {
@@ -768,6 +768,7 @@ namespace KWShared{
                         case WS_READING_PAYLOAD:
                             if (!packPayload)
                                 packPayload = new char[packSize];
+
 
                             if (tempIndex < packSize)
                             {
@@ -1107,9 +1108,10 @@ namespace KWShared{
 
 	void KWTinyWebServer::debug(string debugMessage, bool forceFlush)
 	{
+        /*
         cout << "WebServer: " << debugMessage << endl;
         if (forceFlush)
-            cout << flush;
+            cout << flush;*/
 	}
 
 	long int KWTinyWebServer::getCurrDayMilisec()

@@ -11,9 +11,6 @@ namespace KWShared{
     using namespace JsonMaker;
     class HttpSession: public IWorker
     {
-        protected:
-            map<string, JSON*> currentOpenedSessions;
-
         private:
             unsigned int uniqueCount  = 0;
             StringUtils strUtils;
@@ -62,51 +59,41 @@ namespace KWShared{
                     sysLink.createDirectory(this->dataFolder);
             };
 
-            void load(HttpData* httpData){
-                //get the session cookie
-                string ssid = "";
+            void load(HttpData* httpData){ }
 
+            void unload(HttpData* httpData){ }
+
+            void* setSessionData(HttpData* httpData, JSON* session){
+                //find session object
+                string ssid = "";
                 if (httpData->cookies.find("ssid") == httpData->cookies.end() || httpData->cookies["ssid"] == NULL)
                 {
+                    //cout << "Created a new object for session data" <<  endl;
                     //create a cookie with a new ssid
                     ssid = this->getUniqueId();
 
                     httpData->cookies["ssid"] = new HttpCookie("ssid", ssid);
+
                 }
 
+                //get the ssid
                 ssid = httpData->cookies["ssid"]->value;
 
-                //ensures 'ssid' cookie security
-                httpData->cookies["ssid"]->secure = false;
+                string sessionFileName = getFileNameFromSsid(ssid);
 
+                //write data to file
 
-            }
+                sysLink.waitAndLockFile(sessionFileName, 5000);
+                    //load existing data
+                    string existingData = sysLink.readFile(sessionFileName);
+                    JSON* tmp = new JSON(existingData);
+                    //apenddata
+                    tmp->parseJson(session->ToJson());
+                    string data = tmp->ToJson();
+                    tmp->clear();
 
-            void unload(HttpData* httpData){
-
-                //find session object
-                JSON* session = this->getSessionData(httpData);
-                if (session != NULL)
-                {
-
-                    //save session data to a file
-
-                    //get the JSON data
-                    string data = session->ToJson();
-
-                    //get the ssid
-                    string ssid = httpData->cookies["ssid"]->value;
-
-                    string sessionFileName = getFileNameFromSsid(ssid);
-
-                    //write data to file
                     this->sysLink.writeFile(sessionFileName, data);
-
-                    //remvoe JSON object from 'currentOpenedSessions'
-                    session->clear();
-                    currentOpenedSessions[ssid] = NULL;
-                    currentOpenedSessions.erase(ssid);
-                }
+                sysLink.unlockFile(sessionFileName);
             }
 
             JSON* getSessionData(HttpData* httpData)
@@ -115,28 +102,41 @@ namespace KWShared{
                 {
                     cout << "get session cookie: " << c.first << "="<< c.second->value << endl;
                 }*/
+                string ssid = "";
 
-                //for securty, checks if exists a openes session corresponding to the 'ssid' cookie
-                if (httpData->cookies.find("ssid") != httpData->cookies.end())
+                if (httpData->cookies.find("ssid") == httpData->cookies.end() || httpData->cookies["ssid"] == NULL)
                 {
-                    string ssid = httpData->cookies["ssid"]->value;
+                    //cout << "Created a new object for session data" <<  endl;
+                    //create a cookie with a new ssid
+                    ssid = this->getUniqueId();
 
-                    //checks if session is already loaded from file
-                    if (this->currentOpenedSessions.find(ssid) == this->currentOpenedSessions.end())
-                    {
-                        //determine the fiename of file with session data
-                        string sessionFileName = getFileNameFromSsid(ssid);
+                    httpData->cookies["ssid"] = new HttpCookie("ssid", ssid);
 
-                        //create a new json to receive the data of the current session
-                        this->currentOpenedSessions[ssid] = new JSON();
-                        if (this->sysLink.fileExists(sessionFileName))
-                            this->currentOpenedSessions[ssid]->parseJson(this->sysLink.readFile(sessionFileName));
-                    }
-
-                    return this->currentOpenedSessions[ssid];
                 }
-                else
-                    return NULL;
+
+                ssid = httpData->cookies["ssid"]->value;
+
+                //ensures 'ssid' cookie security
+                httpData->cookies["ssid"]->secure = false;
+
+
+
+                //determine the fiename of file with session data
+                string sessionFileName = getFileNameFromSsid(ssid);
+
+                //create a new json to receive the data of the current session
+                JSON* tmp = new JSON();
+                if (this->sysLink.fileExists(sessionFileName))
+                {
+                    sysLink.waitAndLockFile(sessionFileName, 5000);
+                    string dt = this->sysLink.readFile(sessionFileName);
+                    sysLink.unlockFile(sessionFileName);
+                    tmp->parseJson(dt);
+                    dt.clear();
+                }
+
+                return tmp;
+
             }
     };
 }
