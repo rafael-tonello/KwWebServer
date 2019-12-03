@@ -57,6 +57,7 @@ namespace KWShared{
                 this->dataFolder = ((KWTinyWebServer*)webserver)->__dataFolder + "/sessions/";
                 if (!sysLink.directoryExists(this->dataFolder))
                     sysLink.createDirectory(this->dataFolder);
+
             };
 
             void load(HttpData* httpData){ }
