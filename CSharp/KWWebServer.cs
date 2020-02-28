@@ -15,8 +15,74 @@ using System.Threading.Tasks;
 
 namespace KW
 {
+    public abstract class HTTP_CODES
+    {
+        public const int Continue = 100;
+        public const int SwitchingProtocols = 101;
+        public const int Processing = 102;//webdav
+        public const int EarlyHints = 103;
+        public const int OK = 200;
+        public const int Created = 201;
+        public const int Accepted = 202;
+        public const int NonAuthoritativeInformation = 203;
+        public const int NoContent = 204;
+        public const int ResetContent = 205;
+        public const int PartialContent = 206;
+        public const int MultiStatus = 207; //webdav
+        public const int AlreadyReported = 208; //webdav
+        public const int IMUsed= 226;
+        public const int MultipleChoices = 300;
+        public const int MovedPermanently = 301;
+        public const int Found = 302;
+        public const int SeeOther = 303;
+        public const int NotModified = 304;
+        public const int UseProxy = 305;
+        public const int Unused = 306;
+        public const int TemporaryRedirect = 307;
+        public const int PermanentRedirect = 308;
+        public const int BadRequest = 400;
+        public const int Unauthorized = 401;
+        public const int PaymentRequired = 402;
+        public const int Forbidden = 403;
+        public const int NotFound = 404;
+        public const int MethodNotAllowed = 405;
+        public const int NotAcceptable = 406;
+        public const int ProxyAuthenticationRequired = 407;
+        public const int RequestTimeout = 408;
+        public const int Conflict = 409;
+        public const int Gone = 410;
+        public const int LengthRequired = 411;
+        public const int PreconditionFailed = 412;
+        public const int RequestEntityTooLarge = 413;
+        public const int RequestURITooLong = 414;
+        public const int UnsupportedMediaType = 415;
+        public const int RequestedRangeNotSatisfiable = 416;
+        public const int ExpectationFailed = 417;
+        public const int IamTeaport = 418;
+        public const int MisdirectedRequest = 421;
+        public const int UmprocessableEntity = 422; //webDav
+        public const int Locked = 423; //webDav
+        public const int FailedDependency = 424;
+        public const int TooEarly = 425;
+        public const int UpgradeRequired = 426;
+        public const int PreconditionRequired = 428;
+        public const int TooManyRequests = 429;
+        public const int RequestHeaderFieldsTooLarge = 431;
+        public const int UnavailableForLegalRasons = 451;
+        public const int InternalServerError = 500;
+        public const int NotImplemented = 501;
+        public const int BadGateway = 502;
+        public const int ServiceUnavailable = 503;
+        public const int GatewayTimeout = 504;
+        public const int HTTPVersionNotupported = 505;
+        public const int VariantAlsoNegotiates = 506;
+        public const int InsufficientStorage = 507;
+        public const int LoopDetected = 508;
+        public const int NotExtended = 510;
+        public const int NetworkAuthenticationRequired = 511;
+    };
 
-    public class HttpSessionData: IDisposable
+    public class HttpSessionData : IDisposable
     {
         public string method = "GET";
         public string resource = "";
@@ -28,8 +94,8 @@ namespace KW
 
         public string sBody
         {
-            get{ return Encoding.UTF8.GetString(this.body); }
-            set { this.body = Encoding.UTF8.GetBytes(value);  }
+            get { return Encoding.UTF8.GetString(this.body); }
+            set { this.body = Encoding.UTF8.GetBytes(value); }
 
         }
 
@@ -366,7 +432,7 @@ namespace KW
                 httpStatus = 200,
                 sBody = "",
                 mime = "text/html" + (this.conf_defaultCharSet != "" ? "; charset=" + this.conf_defaultCharSet : "")
-        };
+            };
 
             string dataSend = "";
             string sBuffer = "";
@@ -567,7 +633,7 @@ namespace KW
                         {
 
                             status = 200;
-                            
+
                             if (this.onClienteDataSend != null)
                             {
                                 output = this.onClienteDataSend(input);
@@ -596,7 +662,7 @@ namespace KW
 
                         if (status == 0)
                             status = 200;
-                        
+
 
                         if (output.mime == "")
                             output.mime = "text/html";
@@ -611,22 +677,22 @@ namespace KW
                             "Content-Length: " + output.body.Length + "\r\n" +
                             "Accept-Ranges: bytes\r\n" +
                             "Connection: " + (this.conf_keepAlive ? "Keep-Alive" : "Close") + "\r\n";
-                            //add coustom headers
+                        //add coustom headers
 
-                            foreach (var c in output.headers)
-                                dataSend += c + "\r\n";
+                        foreach (var c in output.headers)
+                            dataSend += c + "\r\n";
 
-                            //add header and content separador
-                            dataSend += "\r\n";
+                        //add header and content separador
+                        dataSend += "\r\n";
 
-                            buffer = new byte[dataSend.Length + output.body.Length];
-                            //put the dataSend bytes to buffer
-                            for (cont = 0; cont < dataSend.Length; cont++)
-                                buffer[cont] = Convert.ToByte(dataSend[cont]);
+                        buffer = new byte[dataSend.Length + output.body.Length];
+                        //put the dataSend bytes to buffer
+                        for (cont = 0; cont < dataSend.Length; cont++)
+                            buffer[cont] = Convert.ToByte(dataSend[cont]);
 
-                            //put the content bbytes to buffer
-                            for (cont = 0; cont < output.body.Length; cont++)
-                                buffer[cont + dataSend.Length] = output.body[cont];
+                        //put the content bbytes to buffer
+                        for (cont = 0; cont < output.body.Length; cont++)
+                            buffer[cont + dataSend.Length] = output.body[cont];
 
                         estado = "enviarResposta";
                         break;
@@ -1023,63 +1089,282 @@ namespace KW
             }
         }
 
-        Dictionary<int, string> translates = null;
-        private string getHttpCodeDescription(int httpCode)
+        Dictionary<int, string> translates = new Dictionary<int, string> {
+            {100, "Continue"},
+            {101, "Switching Protocols"},
+            {102, "Processing"},
+            {103, "Early Hints"},
+            {200, "OK"},
+            {201, "Created"},
+            {202, "Accepted"},
+            {203, "Non-Authoritative Information"},
+            {204, "No Content"},
+            {205, "Reset Content"},
+            {206, "Partial Content"},
+            {207, "Multi Status"},
+            {208, "Already Reported"},
+            {226, "IM Used"},
+            {300, "Multiple Choices"},
+            {301, "Moved Permanently"},
+            {302, "Found"},
+            {303, "See Other"},
+            {304, "Not Modified"},
+            {305, "Use Proxy"},
+            {306, "(Unused)"},
+            {307, "Temporary Redirect"},
+            {308, "Permanent Redirect"},
+            {400, "Bad Request"},
+            {401, "Unauthorized"},
+            {402, "Payment Required"},
+            {403, "Forbidden"},
+            {404, "Not Found"},
+            {405, "Method Not Allowed"},
+            {406, "Not Acceptable"},
+            {407, "Proxy Authentication Required"},
+            {408, "Request Timeout"},
+            {409, "Conflict"},
+            {410, "Gone"},
+            {411, "Length Required"},
+            {412, "Precondition Failed"},
+            {413, "Request Entity Too Large"},
+            {414, "Request-URI Too Long"},
+            {415, "Unsupported Media Type"},
+            {416, "Requested Range Not Satisfiable"},
+            {417, "Expectation Failed"},
+            {418, "IamTeaport"},
+            {421, "MisdirectedRequest"},
+            {422, "UmprocessableEntity"},
+            {423, "Locked = 423"},
+            {424, "FailedDependency"},
+            {425, "TooEarly"},
+            {426, "UpgradeRequired"},
+            {428, "PreconditionRequired"},
+            {429, "TooManyRequests"},
+            {431, "RequestHeaderFieldsTooLarge"},
+            {451, "UnavailableForLegalRasons"},
+            {500, "Internal Server Error"},
+            {501, "Not Implemented"},
+            {502, "Bad Gateway"},
+            {503, "Service Unavailable"},
+            {504, "Gateway Timeout"},
+            {505, "HTTP Version Not Supported"},
+            {506, "Variant Also Negotiates"},
+            {507, "Insufficient Storage"},
+            {508, "Loop Detected"},
+            {210, "Not Extended"},
+            {511, "Network Authentication Required"},
+        };
+
+        public string getHttpCodeDescription(int httpCode)
         {
             //só carrega a lista da primeira vez
             if (translates == null)
             {
-                translates = new Dictionary<int, string>();
 
-                translates.Add(100, "Continue");
-                translates.Add(101, "Switching Protocols");
-                translates.Add(200, "OK");
-                translates.Add(201, "Created");
-                translates.Add(202, "Accepted");
-                translates.Add(203, "Non-Authoritative Information");
-                translates.Add(204, "No Content");
-                translates.Add(205, "Reset Content");
-                translates.Add(206, "Partial Content");
-                translates.Add(300, "Multiple Choices");
-                translates.Add(301, "Moved Permanently");
-                translates.Add(302, "Found");
-                translates.Add(303, "See Other");
-                translates.Add(304, "Not Modified");
-                translates.Add(305, "Use Proxy");
-                translates.Add(306, "(Unused)");
-                translates.Add(307, "Temporary Redirect");
-                translates.Add(400, "Bad Request");
-                translates.Add(401, "Unauthorized");
-                translates.Add(402, "Payment Required");
-                translates.Add(403, "Forbidden");
-                translates.Add(404, "Not Found");
-                translates.Add(405, "Method Not Allowed");
-                translates.Add(406, "Not Acceptable");
-                translates.Add(407, "Proxy Authentication Required");
-                translates.Add(408, "Request Timeout");
-                translates.Add(409, "Conflict");
-                translates.Add(410, "Gone");
-                translates.Add(411, "Length Required");
-                translates.Add(412, "Precondition Failed");
-                translates.Add(413, "Request Entity Too Large");
-                translates.Add(414, "Request-URI Too Long");
-                translates.Add(415, "Unsupported Media Type");
-                translates.Add(416, "Requested Range Not Satisfiable");
-                translates.Add(417, "Expectation Failed");
-                translates.Add(500, "Internal Server Error");
-                translates.Add(501, "Not Implemented");
-                translates.Add(502, "Bad Gateway");
-                translates.Add(503, "Service Unavailable");
-                translates.Add(504, "Gateway Timeout");
-                translates.Add(505, "HTTP Version Not Supported");
             }
 
             if (translates.Keys.ToList().IndexOf(httpCode) > -1)
                 return translates[httpCode];
             else
                 return "Other";
+        }
 
+
+    };
+
+
+    #region router
+        #region internal types
+        class KWRouteItem
+        {
+            public string method;
+            public string originalUrl;
+            public List<string> urlMask;
+            public onDataEvent2 onData;
+        }
+
+        public class ExtendedHttpSessionData : HttpSessionData
+        {
+            public Dictionary<string, string> variables = new Dictionary<string, string>();
+            public ExtendedHttpSessionData(HttpSessionData importFrom)
+            {
+                this.method = importFrom.method;
+                this.resource = importFrom.resource;
+                this.headers = importFrom.headers;
+                this.body = importFrom.body;
+                this.mime = importFrom.mime;
+                this.httpStatus = importFrom.httpStatus;
+                this.tcpClient = importFrom.tcpClient;
+            }
+        }
+
+        public delegate ExtendedHttpSessionData onDataEvent2(ExtendedHttpSessionData data);
+        #endregion
+
+        class KWHttpServerRouter
+        {
+
+
+            private List<KWRouteItem> routes = new List<KWRouteItem>();
+            private onDataEvent2 defaultReq = null;
+
+            public KWHttpServerRouter() { }
+            public KWHttpServerRouter(KWHttpServer serverToAutoRoute)
+            {
+                serverToAutoRoute.onClienteDataSend += delegate (HttpSessionData data)
+                {
+                    return this.route(data);
+                };
+            }
+
+            //process a incoming request. If no serverToAutoRoute is informed, this
+            //method must be runned externally
+            public HttpSessionData route(HttpSessionData data)
+            {
+                int found = 0;
+                ExtendedHttpSessionData result = new ExtendedHttpSessionData(data);
+                //separate url resource and url variables
+                string url = data.resource.Substring(1);
+                string vars = "";
+                if (url.Contains('?'))
+                {
+                    vars = url.Substring(url.IndexOf('?') + 1);
+                    url = url.Substring(0, url.IndexOf('?'));
+                }
+
+                //try identificate the requested resource
+                var urlParts = url.Split('/').ToList();
+
+                //remove emptyResources
+                for (int c = urlParts.Count - 1; c >= 0; c--)
+                {
+                    if (urlParts[c] == "")
+                        urlParts.RemoveAt(c);
+                }
+
+                foreach (var curr in this.routes)
+                {
+                    var valid = true;
+                    if ((curr.method == "ANY" || curr.method == data.method) && (curr.urlMask.Count() == urlParts.Count || curr.originalUrl == "" || curr.originalUrl == "*"))
+                    {
+                        //checks if route mask is compatible with the url   
+                        for (int c = 0; c < curr.urlMask.Count; c++)
+                        {
+                            //check if current mask position is a variable or a const
+                            if (curr.urlMask[c].Length > 0 && curr.urlMask[c][0] == ':')
+                            {
+                                result.variables[curr.urlMask[c].Substring(1)] = urlParts[c];
+                            }
+                            else
+                            {
+                                //if current mask is a cont, checks if this value was come in the url
+                                if (curr.originalUrl != "" && curr.originalUrl != "*" && curr.urlMask[c].ToUpper() != urlParts[c].ToUpper())
+                                {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+
+                        }
+
+                    }
+                    else
+                    {
+                        valid = false;
+                    }
+
+                    if (valid)
+                    {
+                        found++;
+                        //resolve 'URL' variables
+                        var varsArr = vars.Split('&');
+                        foreach (var curr2 in varsArr)
+                        {
+                            if (curr2.Contains('='))
+                                result.variables[curr2.Substring(0, curr2.IndexOf('='))] = curr2.Substring(curr2.IndexOf('=') + 1);
+                        }
+
+                        //calls the event
+                        result = curr.onData(result);
+
+                        //prepare the result to web server
+                        data.method = result.method;
+                        data.resource = result.resource;
+                        data.headers = result.headers;
+                        data.body = result.body;
+                        data.mime = result.mime;
+                        data.httpStatus = result.httpStatus;
+                        data.tcpClient = result.tcpClient;
+
+                        //the system will not break here, to allow user to set more than one 'observer' to the same route
+                    }
+                }
+
+                if (found == 0)
+                { 
+                    if (this.defaultReq != null )
+                    {
+                        result = this.defaultReq(result);
+
+                        //prepare the result to web server
+                        data.method = result.method;
+                        data.resource = result.resource;
+                        data.headers = result.headers;
+                        data.body = result.body;
+                        data.mime = result.mime;
+                        data.httpStatus = result.httpStatus;
+                        data.tcpClient = result.tcpClient;
+                    }
+
+                }
+
+            //return the result of last found route;
+            return data;
+            }
+
+            public void get(string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.addRoute("GET", maskedUrl, onRequest);
+            }
+
+            public void post(string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.addRoute("POST", maskedUrl, onRequest);
+            }
+
+            public void delete(string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.addRoute("DELETE", maskedUrl, onRequest);
+            }
+
+            public void put(string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.addRoute("PUT", maskedUrl, onRequest);
+            }
+
+            public void any(string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.addRoute("ANY", maskedUrl, onRequest);
+            }
+
+        public void setDefault(onDataEvent2 onRequest) {
+                this.defaultReq = onRequest;
+            }
+
+            public void addRoute(string method, string maskedUrl, onDataEvent2 onRequest)
+            {
+                this.routes.Add(new KWRouteItem
+                {
+                    method = method.ToUpper(),
+                    urlMask = maskedUrl.Split('/').ToList(),
+                    originalUrl  = maskedUrl,
+                    onData = onRequest
+                });
+            }
 
         }
-    }
+    #endregion
+
 }
+
+
