@@ -1,0 +1,14 @@
+{
+    //comment
+    "property2":"value2",
+    "property":"value",
+    //another comment here
+    //   haha
+    "property3":"value3"
+
+    //final comment
+
+
+    /* block comment
+    */
+}
