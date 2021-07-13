@@ -1,0 +1,6 @@
+[submodule "sources/TCPServer"]
+	path = sources/TCPServer
+	url = https://github.com/rafinhatonello/TCPServer.git
+[submodule "sources/ThreadPool"]
+	path = sources/ThreadPool
+	url = https://github.com/rafinhatonello/ThreadPool

@@ -94,6 +94,8 @@ namespace KWShared{
                     tmp->clear();
 
                     this->sysLink.writeFile(sessionFileName, data);
+
+                    delete tmp;
                 sysLink.unlockFile(sessionFileName);
             }
 

@@ -8,7 +8,8 @@ sources="$sources sources/tester.cpp"
 
 #library paths
 #Example of use: libraries="$libraries Lsources/myLibFolder"
-libraries=""
+libraries="I./sources/TCPServer"
+libraries="$libraries I./sources/ThreadPool"
 
 #commands to be runned before compiling process
 mkdir bin
