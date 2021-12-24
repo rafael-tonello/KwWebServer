@@ -165,23 +165,26 @@ namespace KWShared{
     }
 
     // trim from start (in place)
-    void StringUtils::ltrim(std::string &s) {
+    string StringUtils::ltrim(string s) {
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
             return !std::isspace(ch);
         }));
+
+        return s;
     }
 
     // trim from end (in place)
-    void StringUtils::rtrim(std::string &s) {
+    string StringUtils::rtrim(std::string s) {
         s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
             return !std::isspace(ch);
         }).base(), s.end());
+
+        return s;
     }
 
     // trim from both ends (in place)
-    void StringUtils::trim(std::string &s) {
-        ltrim(s);
-        rtrim(s);
+    string StringUtils::trim(std::string s) {
+        return ltrim(rtrim(s));
     }
 
 }

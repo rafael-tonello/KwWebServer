@@ -18,9 +18,9 @@ namespace KWShared{
             unsigned char* base64_decode(std::string const& encoded_string);
             string formatDate (time_t dateAndTime);
 
-            void ltrim(std::string &s);
-            void rtrim(std::string &s);
-            void trim(std::string &s);
+            string ltrim(string s);
+            string rtrim(string s);
+            string trim(string s);
     };
 
     static const std::string base64_chars ="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

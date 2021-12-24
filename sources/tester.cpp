@@ -1,56 +1,65 @@
 //compile with g++ -std=c++14 -o saida tester.cpp
 #include <iostream>
 #include <string>
-#include "JSON.h"
+#include <KWTinyWebServer.h>
+#include <HttpData.h>
+
 
 using namespace std;
-using namespace JsonMaker;
+using namespace KWShared;
 
-string readFile(string fName);
-void test1();
-void test2();
+/*class Server: WebServerObserver
+{
+    public:
+        Server(){
+            int port = 5010;
+            KWTinyWebServer *a = new KWShared::KWTinyWebServer(port, this, {});
+            cout << "Server is waiting for connection on port " << port << endl;
+
+        }
+
+        int run(){
+            while (true) usleep(10000);
+        }
+
+        void OnHttpRequest(HttpData* in, HttpData* out)
+        {
+            out->setContentString("Working!");
+
+        }
+
+        void OnWebSocketConnect(HttpData *originalRequest, string resource)
+        {
+
+        }
+
+        void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)
+        {
+
+        }
+
+        void OnWebSocketDisconnect(HttpData *originalRequest, string resource)
+        {
+
+        }
+
+
+};*/
 
 int main()
 {
-    test2();
-    return 0;
-}
+    //Server server;
+    //return server.run();
+    KWTinyWebServer *a = new KWShared::KWTinyWebServer(12345, new WebServerObserverHelper(
+        [](HttpData* in, HttpData* out){
+            out->setContentString("Hey! The web page is working.");
+        }
+    ), {});
 
-void test1()
-{
-    JSON *js = new JSON();
-    js->setString("mas.em.0", "heheheh");
-    js->setString("mas.em.0", "huhu");
-    js->setString("mas.em.1", "suahsuahsuhas");
-
-    cout << js->ToJson(true);
+    system("xdg-open http://127.0.0.1:12345");
 
 
-    cout << endl << flush;
-}
-
-void test2()
-{
-    string content = readFile("commented.json");
-
-    JSON js(content);
-
-    cout << js.ToJson(true);
-    cout << endl << flush;
+    while (true) usleep(10000);
 
 }
 
-string readFile(string fName)
-{
-    FILE* f;
-    f = fopen(fName.c_str(), "r");
-    fseek(f, 0, SEEK_END);
-    size_t s = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char* buffer = new char[s];
-    fread(buffer, s, 1, f);
-    fclose(f);
-    string ret(buffer);
-    delete[] buffer;
-    return ret;
-}

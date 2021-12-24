@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <functional>
 
 
 namespace KWShared{
@@ -30,6 +31,7 @@ namespace KWShared{
             unsigned long getFileSize(string filename);
             bool waitAndLockFile(string filename, int maxTimeout = 1000);
             bool unlockFile(string filename);
+            bool lockFileAndRun(string filename, function<void()> toRun);
             bool directoryExists(string directoryName);
             bool createDirectory(string directoryName);
             vector<string> getFilesFromDirectory(string directoryName, string searchPatern);

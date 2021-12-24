@@ -120,6 +120,16 @@ namespace KWShared{
 		return true;
 	}
 
+	bool SysLink::lockFileAndRun(string filename, function<void()> toRun)
+	{
+		this->waitAndLockFile(filename);
+		toRun();
+		this->unlockFile(filename);
+		
+
+		return true;
+	}
+
 	bool SysLink::directoryExists(string directoryName)
 	{
 

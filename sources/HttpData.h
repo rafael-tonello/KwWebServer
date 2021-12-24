@@ -5,9 +5,11 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <TCPServer.h>
 
 
 namespace KWShared{
+    using namespace TCPServerLib;
     using namespace std;
 
     //this class represents a http cookie.
@@ -104,7 +106,7 @@ namespace KWShared{
                 this->cookies.clear();
             };
 
-            int client;
+            ClientInfo* client;
             string resource;
             string method;
             string contentType;
