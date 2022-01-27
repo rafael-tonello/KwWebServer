@@ -86,19 +86,24 @@ namespace KWShared
     void KWTinyWebServer::initializeClient(ClientInfo *client)
     {
         auto tmp = new KWClientSessionState();
+        tmp->client = client;
         tmp->receivedData.client = client;
         tmp->dataToSend.client = client;
 
+        clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
+        clientsSessionsStatesMutex.unlock();
     }
 
     void KWTinyWebServer::finalizeClient(ClientInfo *client)
     {
+        clientsSessionsStatesMutex.lock();
         if (clientsSessionsStates.count(client->socket) > 0)
         {
             //does not delete the clie here. It will be deleteted by the TCPServer lib
             clientsSessionsStates.erase(client->socket);
         }
+        clientsSessionsStatesMutex.unlock();
     }
 
     void addStringToCharList(vector<char> *destination, string *source, char *source2, int source2Length)
@@ -135,6 +140,7 @@ namespace KWShared
 
     void KWTinyWebServer::dataReceivedFrom(ClientInfo *client, char *data, size_t dataSize)
     {
+
         if (clientsSessionsStates.count(client->socket) <= 0)
             throw "data received for a no intialized client";
 
@@ -150,7 +156,12 @@ namespace KWShared
        
 
         if (sessionState->webSocketOpen)
-            return WebSocketProcess(client, data, dataSize);
+        {
+            WebSocketProcess(client, data, dataSize);
+
+            return;
+        }
+
 
         size_t cont = 0;
 
@@ -264,7 +275,6 @@ namespace KWShared
             sessionState->dataToSend.httpStatus = 101;
             sessionState->receivedData.httpStatus = 101;
         }
-
         while (sessionState->state != FINISHED)
         {
             sessionState->prevState = sessionState->state;
@@ -437,7 +447,12 @@ namespace KWShared
         }
 
         if (sessionState->state == FINISHED)
-            client->disconnect();
+        {
+            if (sessionState->webSocketOpen)
+                this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
+            else
+                client->disconnect();
+        }
     }
 
     void KWTinyWebServer::WebSocketProcess(ClientInfo* client, char* data, size_t dataSize)
@@ -446,24 +461,6 @@ namespace KWShared
 
         HttpData *request = &(sessionState->receivedData);
         string resource = request->resource;
-
-
-        int tempIndex = 0;
-        char packSize7bit;
-        int16_t packSize16bit;
-        char mask[4];
-        bool fin;
-        char *packPayload;
-        vector<char *> payload;
-        vector<int> payloadSizes;
-        unsigned long long totalPayload = 0;
-        unsigned long long packSize;
-
-        
-
-        char curr;
-        bool masked;
-        char opcode; //4 bits
 
         /*int readCount;
         char readBuffer[1024];
@@ -478,178 +475,181 @@ namespace KWShared
         //some problems to websocket connection was solved with this delay
         //usleep(2000000);
 
-        this->__observer->OnWebSocketConnect(request, resource);
+        
+        char ws_curr;
 
-        while (sessionState->webSocketState != WS_FINISHED)
+        for (size_t cont = 0; cont < dataSize; cont++)
         {
-            for (size_t cont = 0; cont < dataSize; cont++)
+            ws_curr = data[cont];
+            //READ DATA FROM SOCKET
+
+            switch (sessionState->webSocketState)
             {
-                curr = data[cont];
-                //READ DATA FROM SOCKET
+            //read the first 2 bytes that contains the information about the incoming pack
+            case WS_READING_PACK_INFO_1:
+                sessionState->ws_tempIndex = 0;
+                sessionState->ws_totalPayload = 0;
+                //extract bit finformation
+                //fin indicates that  this pack is the last of the current message (message can be made of many packs)
+                sessionState->ws_fin = ws_curr & 0b10000000;
 
-                switch (sessionState->webSocketState)
+                //the opcode is the type of pack (0x00 is a continuatino pack, 0x01 is a text pack, 0x02 is a binary pack)
+                sessionState->ws_opcode = ws_curr & 0b00001111;
+
+                sessionState->ws_tempIndex = 0;
+
+                //clear the buffer
+                if (sessionState->ws_packPayload)
                 {
-                //read the first 2 bytes that contains the information about the incoming pack
-                case WS_READING_PACK_INFO_1:
-                    //extract bit finformation
-                    //fin indicates that  this pack is the last of the current message (message can be made of many packs)
-                    fin = curr & 0b10000000;
+                    sessionState->ws_packPayload = NULL;client->disconnect();
+        
+                }
 
-                    //the opcode is the type of pack (0x00 is a continuatino pack, 0x01 is a text pack, 0x02 is a binary pack)
-                    opcode = curr & 0b00001111;
+                sessionState->webSocketState = WS_READING_PACK_INFO_2;
+                break;
+            case WS_READING_PACK_INFO_2:
+                //mask indicates if the pack data is masked. Any messages came from client must be masked. If this field has value 0,
+                //the serve must send an error information and closes the socket connection
+                sessionState->ws_masked = ws_curr & 0b10000000;
+                sessionState->ws_mask[0] = 0;
+                sessionState->ws_mask[1] = 0;
+                sessionState->ws_mask[2] = 0;
+                sessionState->ws_mask[3] = 0;
 
-                    tempIndex = 0;
-
-                    //clear the buffer
-                    if (packPayload)
+                if (sessionState->ws_masked == 1)
+                {
+                    //read the first byt of packSize. If this value is equals to 126, the server needs to read the next 16 bits to get an
+                    //unsigned 16 bit int with the pack sie. If this value is equals to 127, the server must read the next 64 bits to get
+                    //an unsigned int64 with the pack size. If the value is less than 126, this is the pack size
+                    sessionState->ws_packSize7bit = ws_curr & 0b01111111;
+                    if (sessionState->ws_packSize7bit < 126)
                     {
-                        packPayload = NULL;
+                        sessionState->ws_packSize = sessionState->ws_packSize7bit;
+                        sessionState->ws_tempIndex = 0;
+                        sessionState->webSocketState = WS_READING_MASK_KEY;
                     }
-
-                    sessionState->webSocketState = WS_READING_PACK_INFO_2;
-                    break;
-                case WS_READING_PACK_INFO_2:
-                    //mask indicates if the pack data is masked. Any messages came from client must be masked. If this field has value 0,
-                    //the serve must send an error information and closes the socket connection
-                    masked = curr & 0b10000000;
-                    mask[0] = 0;
-                    mask[1] = 0;
-                    mask[2] = 0;
-                    mask[3] = 0;
-
-                    if (masked == 1)
-                    {
-                        //read the first byt of packSize. If this value is equals to 126, the server needs to read the next 16 bits to get an
-                        //unsigned 16 bit int with the pack sie. If this value is equals to 127, the server must read the next 64 bits to get
-                        //an unsigned int64 with the pack size. If the value is less than 126, this is the pack size
-                        packSize7bit = curr & 0b01111111;
-                        if (packSize7bit < 126)
-                        {
-                            packSize = packSize7bit;
-                            tempIndex = 0;
-                            sessionState->webSocketState = WS_READING_MASK_KEY;
-                        }
-                        else if (packSize == 126)
-                            sessionState->webSocketState = WS_READ_16BIT_SIZE;
-                        else if (packSize == 127)
-                            sessionState->webSocketState = WS_READ_64BIT_SIZE;
-                        else
-                        {
-                            //This code never can be executed. If execution reaches this code, the server was erroneus readed  the packSize
-                            //or errnoeus made bit-to-bit process.
-                            cont--;
-                            sessionState->webSocketState = WS_INTERNAL_SERVER_ERROR;
-                        }
-
-                        tempIndex = 0;
-                        packSize16bit = 0;
-                    }
+                    else if (sessionState->ws_packSize == 126)
+                        sessionState->webSocketState = WS_READ_16BIT_SIZE;
+                    else if (sessionState->ws_packSize == 127)
+                        sessionState->webSocketState = WS_READ_64BIT_SIZE;
                     else
                     {
-                        this->debug("Error, websocket payload not masked");
+                        //This code never can be executed. If execution reaches this code, the server was erroneus readed  the packSize
+                        //or errnoeus made bit-to-bit process.
                         cont--;
-                        sessionState->webSocketState = WS_PAYLOAD_NOT_MASKED;
-
-                        //although it goes against the specification of WebSocket, it is possible to interpret unmarked packages from the
-                        //client, if this is decided, just ignore the reading of the mask and go straight to the reading of the payload.
-                    }
-                    break;
-                case WS_READ_16BIT_SIZE:
-                    ((char *)&packSize16bit)[tempIndex++] = curr;
-                    if (tempIndex == 2)
-                    {
-                        packSize = packSize16bit;
-                        tempIndex = 0;
-                        sessionState->webSocketState = WS_READING_MASK_KEY;
-                    }
-                    break;
-                case WS_READ_64BIT_SIZE:
-
-                    ((char *)&packSize)[tempIndex++] = curr;
-                    if (tempIndex == 4)
-                    {
-                        tempIndex = 0;
-                        sessionState->webSocketState = WS_READING_MASK_KEY;
+                        sessionState->webSocketState = WS_INTERNAL_SERVER_ERROR;
                     }
 
-                    break;
-                case WS_READING_MASK_KEY:
-                    mask[tempIndex++] = curr;
-                    if (tempIndex == 4)
+                    sessionState->ws_tempIndex = 0;
+                    sessionState->ws_packSize16bit = 0;
+                }
+                else
+                {
+                    this->debug("Error, websocket payload not masked");
+                    cont--;
+                    sessionState->webSocketState = WS_PAYLOAD_NOT_MASKED;
+
+                    //although it goes against the specification of WebSocket, it is possible to interpret unmarked packages from the
+                    //client, if this is decided, just ignore the reading of the mask and go straight to the reading of the payload.
+                }
+                break;
+            case WS_READ_16BIT_SIZE:
+                ((char *)&(sessionState->ws_packSize16bit))[sessionState->ws_tempIndex++] = ws_curr;
+                if (sessionState->ws_tempIndex == 2)
+                {
+                    sessionState->ws_packSize = sessionState->ws_packSize16bit;
+                    sessionState->ws_tempIndex = 0;
+                    sessionState->webSocketState = WS_READING_MASK_KEY;
+                }
+                break;
+            case WS_READ_64BIT_SIZE:
+
+                ((char *)&(sessionState->ws_packSize))[sessionState->ws_tempIndex++] = ws_curr;
+                if (sessionState->ws_tempIndex == 4)
+                {
+                    sessionState->ws_tempIndex = 0;
+                    sessionState->webSocketState = WS_READING_MASK_KEY;
+                }
+
+                break;
+            case WS_READING_MASK_KEY:
+                sessionState->ws_mask[sessionState->ws_tempIndex++] = ws_curr;
+                if (sessionState->ws_tempIndex == 4)
+                {
+                    sessionState->ws_tempIndex = 0;
+                    sessionState->webSocketState = WS_READING_PAYLOAD;
+                }
+                break;
+            case WS_READING_PAYLOAD:
+                if (!sessionState->ws_packPayload)
+                    sessionState->ws_packPayload = new char[sessionState->ws_packSize];
+
+                if (sessionState->ws_tempIndex < sessionState->ws_packSize)
+                {
+                    sessionState->ws_packPayload[sessionState->ws_tempIndex] = ws_curr ^ sessionState->ws_mask[sessionState->ws_tempIndex % 4];
+                    sessionState->ws_tempIndex++;
+                }
+
+                //don't use else here, becauze tempIndex is changed on 'if' above and can't enter at code bellow in te last pack byte.
+
+                if (sessionState->ws_tempIndex >= sessionState->ws_packSize)
+                {
+                    sessionState->ws_payload.push_back(sessionState->ws_packPayload);
+                    sessionState->ws_payloadSizes.push_back(sessionState->ws_tempIndex);
+                    sessionState->ws_totalPayload += sessionState->ws_tempIndex;
+
+                    //check if pack is the last of message
+                    if (sessionState->ws_fin)
                     {
-                        tempIndex = 0;
-                        sessionState->webSocketState = WS_READING_PAYLOAD;
-                    }
-                    break;
-                case WS_READING_PAYLOAD:
-                    if (!packPayload)
-                        packPayload = new char[packSize];
+                        sessionState->ws_tempIndex = 0;
+                        //parepare an object to contaisn the received data
 
-                    if (tempIndex < packSize)
-                    {
-                        packPayload[tempIndex] = curr ^ mask[tempIndex % 4];
-                        tempIndex++;
-                    }
+                        char *fullPayload = new char[sessionState->ws_totalPayload];
 
-                    //don't use else here, becauze tempIndex is changed on 'if' above and can't enter at code bellow in te last pack byte.
-
-                    if (tempIndex >= packSize)
-                    {
-                        payload.push_back(packPayload);
-                        payloadSizes.push_back(tempIndex);
-                        totalPayload += tempIndex;
-
-                        //check if pack is the last of message
-                        if (fin)
+                        //get all data from all framees of message
+                        for (int cPayload = 0; cPayload < sessionState->ws_payload.size(); cPayload++)
                         {
-                            tempIndex = 0;
-                            //parepare an object to contaisn the received data
-
-                            char *fullPayload = new char[totalPayload];
-
-                            //get all data from all framees of message
-                            for (int cPayload = 0; cPayload < payload.size(); cPayload++)
+                            for (int cData = 0; cData < sessionState->ws_payloadSizes[cPayload]; cData++)
                             {
-                                for (int cData = 0; cData < payloadSizes[cPayload]; cData++)
-                                {
-                                    fullPayload[tempIndex++] = payload[cPayload][cData];
-                                }
-
-                                delete[] payload[cPayload];
+                                fullPayload[sessionState->ws_tempIndex++] = sessionState->ws_payload[cPayload][cData];
                             }
 
-                            payload.clear();
-                            payloadSizes.clear();
-                            //send payload to application
-
-                            this->__observer->OnWebSocketData(request, resource, fullPayload, totalPayload);
-
-                            //clear payload buffers
-                            delete[] fullPayload;
-                            totalPayload = 0;
+                            delete[] sessionState->ws_payload[cPayload];
                         }
-                        packPayload = NULL;
 
-                        tempIndex = 0;
+                        sessionState->ws_payload.clear();
+                        sessionState->ws_payloadSizes.clear();
+                        //send payload to application
 
-                        sessionState->webSocketState = WS_READING_PACK_INFO_1;
+                        this->__observer->OnWebSocketData(request, resource, fullPayload,sessionState->ws_totalPayload);
+
+                        //clear payload buffers
+                        delete[] fullPayload;
+                        sessionState->ws_totalPayload = 0;
                     }
+                    sessionState->ws_packPayload = NULL;
 
-                    break;
-                    case WS_INTERNAL_SERVER_ERROR:
-                        sessionState->webSocketState = WS_FINISHED;
-                    break;
-                    case WS_PAYLOAD_NOT_MASKED:
-                        sessionState->webSocketState = WS_FINISHED;
-                    break;
+                    sessionState->ws_tempIndex = 0;
+
+                    sessionState->webSocketState = WS_READING_PACK_INFO_1;
                 }
+
+                break;
+                case WS_INTERNAL_SERVER_ERROR:
+                    sessionState->webSocketState = WS_FINISHED;
+                break;
+                case WS_PAYLOAD_NOT_MASKED:
+                    sessionState->webSocketState = WS_FINISHED;
+                break;
             }
         }
 
-        this->__observer->OnWebSocketDisconnect(request, resource);
-
-        client->disconnect();
-        request->clear();
+        if (sessionState->webSocketState == WS_FINISHED)
+        {
+            this->__observer->OnWebSocketDisconnect(request, resource);
+            client->disconnect();
+            request->clear();
+        }
     }
 
     void KWTinyWebServer::__TryAutoLoadFiles(HttpData *in, HttpData *out)
@@ -839,6 +839,29 @@ namespace KWShared
     void KWTinyWebServer::sendWebSocketData(HttpData *originalRequest, char *data, int size, bool isText)
     {
         this->sendWebSocketData(originalRequest->client, data, size, isText);
+    }
+
+    void KWTinyWebServer::broadcastWebSocker(char* data, int size, bool isText, string resource)
+    {
+
+        vector<ClientInfo*> cli;
+        clientsSessionsStatesMutex.lock();
+        for (auto &c: clientsSessionsStates)
+        {
+            if (c.second->webSocketOpen == true)
+            {
+                if (resource == "*" || resource == "" || c.second->receivedData.resource == resource)
+                    cli.push_back(c.second->client);
+            }
+        }
+        clientsSessionsStatesMutex.unlock();
+
+
+        for (auto &c: cli)
+        {
+            this->sendWebSocketData(c, data, size, isText);
+        }
+
     }
 
     void KWTinyWebServer::debug(string debugMessage, bool forceFlush)
