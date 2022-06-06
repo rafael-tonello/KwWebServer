@@ -97,6 +97,7 @@ namespace KWShared{
     class KWClientSessionState{
     public:
         string internalServerErrorMessage = "";
+        ClientInfo* client;
         HttpData receivedData, dataToSend;
         States state = AWAIT_HTTP_FIRST_LINE;
         States prevState = AWAIT_HTTP_FIRST_LINE;
@@ -104,7 +105,21 @@ namespace KWShared{
         string upgrade = "";
         unsigned int currentContentLength = 0;
         bool webSocketOpen = false;
-        bool webSocketState = WebSocketStates::WS_READING_PACK_INFO_1;
+        WebSocketStates webSocketState = WebSocketStates::WS_READING_PACK_INFO_1;
+
+
+        int ws_tempIndex = 0;
+        char ws_packSize7bit;
+        int16_t ws_packSize16bit;
+        char ws_mask[4];
+        bool ws_fin;
+        char *ws_packPayload;
+        vector<char *> ws_payload;
+        vector<int> ws_payloadSizes;
+        unsigned long long ws_totalPayload = 0;
+        unsigned long long ws_packSize;
+        bool ws_masked;
+        char ws_opcode; //4 bits
     };
 
 
@@ -123,6 +138,7 @@ namespace KWShared{
 
             void sendWebSocketData(ClientInfo *client, char* data, int size, bool isText);
             void sendWebSocketData(HttpData *originalRequest, char* data, int size, bool isText);
+            void broadcastWebSocker(char* data, int size, bool isText, string resource = "*");
 
             void __TryAutoLoadFiles(HttpData* in, HttpData* out);
             WebServerObserver *__observer;
@@ -142,6 +158,7 @@ namespace KWShared{
                 new CookieParser()
             };
         private:
+            mutex clientsSessionsStatesMutex;
             map<int, KWClientSessionState*> clientsSessionsStates;
             vector<string> __filesLocations;
             string get_app_path();
