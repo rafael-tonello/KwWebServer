@@ -41,7 +41,7 @@ namespace KWShared{
 
                                 //trim key and value
                                 tempKey = this->strUtils.trim(tempKey);
-                                tempKey = this->strUtils.trim(tempValue);
+                                tempValue = this->strUtils.trim(tempValue);
 
                                 //save cookie in the httpData object
                                 if (!httpData->cookies.count(tempKey))
