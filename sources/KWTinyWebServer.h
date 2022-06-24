@@ -47,7 +47,7 @@
 #include "HttpData.h"
 #include "StringUtils.h"
 #include "IWorker.h"
-#include "CookieParser.h"
+#include "Workers/CookieParser.h"
 #include <libgen.h>
 #include <unistd.h>
 #include <limits.h>
@@ -97,7 +97,7 @@ namespace KWShared{
     class KWClientSessionState{
     public:
         string internalServerErrorMessage = "";
-        ClientInfo* client;
+        ClientInfo* client = nullptr;
         HttpData receivedData, dataToSend;
         States state = AWAIT_HTTP_FIRST_LINE;
         States prevState = AWAIT_HTTP_FIRST_LINE;
@@ -110,16 +110,26 @@ namespace KWShared{
 
         int ws_tempIndex = 0;
         char ws_packSize7bit;
-        int16_t ws_packSize16bit;
+        int16_t ws_packSize16bit = 0;
         char ws_mask[4];
         bool ws_fin;
-        char *ws_packPayload;
+        char *ws_packPayload = nullptr;
         vector<char *> ws_payload;
         vector<int> ws_payloadSizes;
         unsigned long long ws_totalPayload = 0;
-        unsigned long long ws_packSize;
+        unsigned long long ws_packSize = 0;
         bool ws_masked;
         char ws_opcode; //4 bits
+
+        KWClientSessionState(){
+
+        }
+
+        ~KWClientSessionState(){
+            for (auto &c: ws_payload)
+                delete[] c;
+            ws_payload.clear();
+        }
     };
 
 
@@ -139,6 +149,8 @@ namespace KWShared{
             void sendWebSocketData(ClientInfo *client, char* data, int size, bool isText);
             void sendWebSocketData(HttpData *originalRequest, char* data, int size, bool isText);
             void broadcastWebSocker(char* data, int size, bool isText, string resource = "*");
+            void disconnecteWebSocket(ClientInfo* client);
+            void disconnecteWebSocket(HttpData* originalRequest);
 
             void __TryAutoLoadFiles(HttpData* in, HttpData* out);
             WebServerObserver *__observer;
@@ -170,54 +182,6 @@ namespace KWShared{
             void finalizeClient(ClientInfo* client);
             void dataReceivedFrom(ClientInfo* client, char* data, size_t dataSize);
             void WebSocketProcess(ClientInfo* client, char* data, size_t dataSize);
-    };
-
-    //this class allow the instance of the webserver without implement the WebServerObserver interface.
-    //TODO:Create a KWHelpers.h
-    //TODO:Create an API helper
-    class WebServerObserverHelper: public WebServerObserver
-    {
-    private:
-        function<void(HttpData* in, HttpData* out)> onHttpRequest;
-        function<void(HttpData *originalRequest, string resource)> onWebSocketConnect;
-        function<void(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData;
-        function<void(HttpData *originalRequest, string resource)> onWebSocketDisconnect;
-    public:
-        WebServerObserverHelper(
-            function<void(HttpData* in, HttpData* out)> onHttpRequest,
-            function<void(HttpData *originalRequest, string resource)> onWebSocketConnect = [](HttpData *originalRequest, string resource){},
-            function<void(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData = [](HttpData *originalRequest, string resource, char* data, unsigned long long dataSize){},
-            function<void(HttpData *originalRequest, string resource)> onWebSocketDisconnect = [](HttpData *originalRequest, string resource){}
-        ){
-            this->onHttpRequest = onHttpRequest;
-            this->onWebSocketConnect = onWebSocketConnect;
-            this->onWebSocketData = onWebSocketData;
-            this->onWebSocketDisconnect = onWebSocketDisconnect;
-        }
-
-        int run(){
-            while (true) usleep(10000);
-        }
-
-        void OnHttpRequest(HttpData* in, HttpData* out)
-        {
-            this->onHttpRequest(in, out);
-        }
-
-        void OnWebSocketConnect(HttpData *originalRequest, string resource)
-        {
-            this->onWebSocketConnect(originalRequest, resource);
-        }
-
-        void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)
-        {
-            this->onWebSocketData(originalRequest, resource, data, dataSize);
-        }
-
-        void OnWebSocketDisconnect(HttpData *originalRequest, string resource)
-        {
-            this->onWebSocketDisconnect(originalRequest, resource);
-        }
     };
 }
 #endif

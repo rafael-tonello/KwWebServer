@@ -96,11 +96,25 @@ namespace KWShared
     }
 
     void KWTinyWebServer::finalizeClient(ClientInfo *client)
+
     {
         clientsSessionsStatesMutex.lock();
         if (clientsSessionsStates.count(client->socket) > 0)
         {
+            if (clientsSessionsStates[client->socket]->webSocketOpen)
+            {
+                //finalize websocket
+                clientsSessionsStates[client->socket]->webSocketState = WS_FINISHED;
+                WebSocketProcess(client, "", 0);
+            }
+
+            clientsSessionsStates[client->socket]->receivedData.clear();
+            clientsSessionsStates[client->socket]->dataToSend.clear();
+
             //does not delete the clie here. It will be deleteted by the TCPServer lib
+            delete clientsSessionsStates[client->socket];
+
+
             clientsSessionsStates.erase(client->socket);
         }
         clientsSessionsStatesMutex.unlock();
@@ -142,7 +156,8 @@ namespace KWShared
     {
 
         if (clientsSessionsStates.count(client->socket) <= 0)
-            throw "data received for a no intialized client";
+            return;
+            //throw std::runtime_error("data received for a no intialized client");
 
         KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
 
@@ -198,8 +213,7 @@ namespace KWShared
 
                         //start read headers
                         sessionState->state = READING_HEADER;
-                    }
-
+                    };
                     break;
                 case READING_HEADER:
                     bufferStr += data[cont];
@@ -260,8 +274,7 @@ namespace KWShared
                         //rawBuffer.clear();
                         sessionState->state = SEND_REQUEST_TO_APP;
                     }
-                    else
-                        usleep(500);
+
 
                     break;
                 }
@@ -288,8 +301,7 @@ namespace KWShared
                 timep = gmtime(&t);
                 strftime(dtStr, 256, "%a, %d %b %Y %T GMT", timep);
                 sessionState->dataToSend.headers.push_back({"date", string(dtStr)});
-
-                //try ausendFiles
+                //try autosendFiles
                 if (sessionState->dataToSend.httpStatus != 101)
                     this->__TryAutoLoadFiles(&sessionState->receivedData, &sessionState->dataToSend);
                 //notify workers
@@ -309,7 +321,7 @@ namespace KWShared
 
                 //clear used data
 
-                if (sessionState->dataToSend.contentType == "notFound")
+                if (sessionState->dataToSend.httpStatus == 0 && sessionState->dataToSend.contentType == "")
                 {
                     sessionState->dataToSend.httpStatus = 404;
                     sessionState->dataToSend.httpMessage = "Not found";
@@ -322,11 +334,12 @@ namespace KWShared
                 }
 
                 sessionState->state = CHECK_PROTOCOL_CHANGE;
+                
                 break;
             case CHECK_PROTOCOL_CHANGE:
                 sessionState->state = SEND_RESPONSE;
                 //check if http request is an protocol change request
-                if (sessionState->dataToSend.httpStatus == 101)
+                if (sessionState->receivedData.httpStatus == 101)
                 {
                     sessionState->dataToSend.contentBody = new char[0];
                     sessionState->dataToSend.contentLength = 0;
@@ -352,6 +365,7 @@ namespace KWShared
                         //prepare the http response to client
                         sessionState->dataToSend.httpStatus = 101;
                         sessionState->dataToSend.httpMessage = "Switching Protocols";
+                        sessionState->dataToSend.setContentString("");
                         sessionState->dataToSend.headers.push_back({"Upgrade", "websocket"});
                         sessionState->dataToSend.headers.push_back({"Connection", "Upgrade"});
                         sessionState->dataToSend.headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
@@ -451,7 +465,10 @@ namespace KWShared
             if (sessionState->webSocketOpen)
                 this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
             else
+            {
+                sessionState->receivedData.clear();
                 client->disconnect();
+            }
         }
     }
 
@@ -478,7 +495,7 @@ namespace KWShared
         
         char ws_curr;
 
-        for (size_t cont = 0; cont < dataSize; cont++)
+        for (size_t cont = 0; cont < dataSize && sessionState->webSocketState != WS_FINISHED; cont++)
         {
             ws_curr = data[cont];
             //READ DATA FROM SOCKET
@@ -763,9 +780,8 @@ namespace KWShared
             else
             {
                 out->contentType = "";
-                out->httpStatus = 404;
-                out->httpMessage = "Not found";
                 out->contentLength = 0;
+                out->httpStatus = 0;
 
                 string t = "the file " + fName + "could not be found ";
                 debug(t);
@@ -862,6 +878,16 @@ namespace KWShared
             this->sendWebSocketData(c, data, size, isText);
         }
 
+    }
+
+    void KWTinyWebServer::disconnecteWebSocket(ClientInfo* client)
+    {
+        client->disconnect();
+    }
+
+    void KWTinyWebServer::disconnecteWebSocket(HttpData* originalRequest)
+    {
+        this->disconnecteWebSocket(originalRequest->client);
     }
 
     void KWTinyWebServer::debug(string debugMessage, bool forceFlush)

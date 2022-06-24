@@ -6,4 +6,10 @@
 	url = https://github.com/rafinhatonello/ThreadPool
 [submodule "sources/libs/libs.json_maker"]
 	path = sources/libs/libs.json_maker
-	url = https://github.com/rafinhatonello/libs.json_maker
+	url = https://github.com/rafinhatonello/libs.json_maker.git
+[submodule "sources/libs/TCPServer"]
+	path = sources/libs/TCPServer
+	url = https://github.com/rafinhatonello/TCPServer.git
+[submodule "sources/libs/ThreadPool"]
+	path = sources/libs/ThreadPool
+	url = https://github.com/rafinhatonello/ThreadPool.git

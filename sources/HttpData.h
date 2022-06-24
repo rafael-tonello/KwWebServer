@@ -51,7 +51,8 @@ namespace KWShared{
             bool httpOnly = false;
     };
 
-    class HttpData{
+    
+        class HttpData{
         public:
             HttpData(){}
             HttpData(HttpData* copyFrom){
@@ -77,8 +78,6 @@ namespace KWShared{
                     this->cookies[c.first] = new HttpCookie(c.second);
                 }
 
-                char* contentBody = NULL;
-
                 this->contentBody = new char[this->contentLength];
                 for (unsigned int c = 0; c < this->contentLength; c++)
                     this->contentBody[c] = toCopy->contentBody[c];
@@ -97,6 +96,13 @@ namespace KWShared{
                 this->setContentString("");
                 this->headers.clear();
                 this->httpMessage.clear();
+                 
+                if (this->contentBody != NULL)
+                {
+                    delete[] this->contentBody;
+                    this->contentBody = NULL;
+                }
+
 
                 for (auto &c: this->cookies)
                 {
@@ -106,21 +112,24 @@ namespace KWShared{
                 this->cookies.clear();
             };
 
-            ClientInfo* client;
-            string resource;
-            string method;
-            string contentType;
+            ClientInfo* client = nullptr;
+            string resource = "";
+            string method = "";
+            string contentType = "";
             char* contentBody = NULL;
             unsigned int contentLength = 0;
             vector< vector<string> > headers;
-            unsigned int httpStatus;
-            string httpMessage;
-            map<string, HttpCookie*> cookies;
+            unsigned int httpStatus = 0;
+            string httpMessage = "";
+            map<string, HttpCookie*> cookies = {};
 
             void setContentString(string data)
             {
                 if (this->contentBody != NULL)
+                {
                     delete[] this->contentBody;
+                    this->contentBody = NULL;
+                }
 
                 this->contentBody = new char[data.size()];
                 for (int cont = 0; cont < data.size(); cont++)

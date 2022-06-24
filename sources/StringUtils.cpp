@@ -158,7 +158,7 @@ namespace KWShared{
        //Wed, 21 Oct 2015 07:28:00 GMT;
        struct tm* gmt = gmtime(&dateAndTime);
 
-       strftime(buffer, 50, "%a, %d %b %Y %H:%M%S GMT\0", gmt);
+       strftime(buffer, 50, "%a, %d %b %Y %H:%M%S GMT", gmt);
        string ret(buffer);
 
        return ret;
