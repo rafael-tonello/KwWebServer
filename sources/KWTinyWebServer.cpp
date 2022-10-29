@@ -73,7 +73,7 @@ namespace KWShared
             {
                 if (event == CONN_EVENT::CONNECTED)
                     this->initializeClient(client);
-                else
+                else    
                     this->finalizeClient(client);
             }
         );
@@ -428,6 +428,7 @@ namespace KWShared
                 {
                     if (sessionState->dataToSend.headers.at(cont).size() > 1)
                     {
+                        //TODO: if you keep f5 pressed on browser, this line raises an error
                         client->sendString(sessionState->dataToSend.headers.at(cont).at(0) + ": " + sessionState->dataToSend.headers.at(cont).at(1) + "\r\n");
                     }
                 }
