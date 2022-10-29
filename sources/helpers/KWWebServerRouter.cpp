@@ -52,7 +52,8 @@ shared_ptr<KWSRequestRoute> KWWebServerRouter::route(string method, string resou
     auto result = new KWSRequestRouteExtended();
     result->method = method;
     result->resource = resource;
-    string routeId = fixRouteId(method+resource);
+    //string routeId = fixRouteId(method+resource);
+    string routeId = resource != "*" ? fixRouteId("WS"+resource) : "**";
             
     runLocked([&](){
         if (!this->requestRoutesObservers.count(routeId))
