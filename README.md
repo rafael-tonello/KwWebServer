@@ -42,3 +42,4 @@ In the GCC, you just need to use the command line option '-I':
         [ ] Analyse if the cpp native streams can be used instead
 
     [ ] Rename all setContent* methods to just to 'setContet' and uses function overload.
+    [ ] Separate url vars and resource.
