@@ -63,7 +63,8 @@ namespace KWShared
 
         if (!tcpServerStartResult)
         {
-            cerr << "KwTinyWebServer startup error: the tcp server was not initialized correctly" << endl;
+            //cerr << "KwTinyWebServer startup error: the tcp server was not initialized correctly" << endl;
+            throw std::runtime_error("KwTinyWebServer startup error: the tcp server was not initialized correctly");
             return;
         }
 
