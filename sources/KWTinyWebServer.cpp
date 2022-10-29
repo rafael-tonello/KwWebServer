@@ -58,7 +58,15 @@ namespace KWShared
             curr->start(this);
 
         //star the TCPServer
-        this->server = new TCPServer(port, this->__tasks);
+        bool tcpServerStartResult = false;
+        this->server = new TCPServer(port, tcpServerStartResult, this->__tasks);
+
+        if (!tcpServerStartResult)
+        {
+            cerr << "KwTinyWebServer startup error: the tcp server was not initialized correctly" << endl;
+            return;
+        }
+
         this->server->addConEventListener(
             [this](ClientInfo *client, CONN_EVENT event)
             {

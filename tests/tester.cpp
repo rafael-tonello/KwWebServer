@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <KWTinyWebServer.h>
+#include <WebServerObserverHelper.h>
 #include <HttpData.h>
 
 

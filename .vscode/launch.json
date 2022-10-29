@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "g++ - Build and debug active file",
+            "name": "Build and debug tests",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/test_server",
