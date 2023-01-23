@@ -400,6 +400,21 @@ namespace KWShared
             case SEND_RESPONSE:
 
                 //send first line and server name
+                if (sessionState->dataToSend.httpStatus == 0)
+                {
+                    if (sessionState->dataToSend.contentLength == 0)
+                    {
+                        sessionState->dataToSend.httpStatus = 204;
+                        sessionState->dataToSend.httpMessage = "No content";
+                    }
+                    else
+                    {
+                        sessionState->dataToSend.httpStatus = 200;
+                        sessionState->dataToSend.httpMessage = "OK";
+                    }
+
+                }
+
                 client->sendString(
                     "HTTP/1.1 " +
                     std::to_string(sessionState->dataToSend.httpStatus) +
