@@ -20,7 +20,7 @@
 #include <iterator>
 #include <string.h>
 #include <string>
-#include <list>remo
+#include <list>
 #include <fcntl.h>
 #include <vector>
 #include <iostream>
