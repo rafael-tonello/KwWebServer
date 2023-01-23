@@ -38,11 +38,11 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.0.1";
-        //                                                     | | |
-        //                                                     | | +------> Bugs fixes and compilation
-        //                                                     | +--------> New features
-        //                                                     +----------> Big changes, architecture changes and incompatibilities
+        this->__serverName = "KWTinyWebServer embeded server, version 2.0.2";
+        //                                                            | | |
+        //                                                            | | +------> Bugs fixes and compilation
+        //                                                            | +--------> New features
+        //                                                            +----------> Big changes, architecture changes and incompatibilities
         this->__observer = observer;
         this->__filesLocations = filesLocations;
 //ctor
