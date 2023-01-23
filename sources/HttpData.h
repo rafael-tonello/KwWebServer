@@ -145,8 +145,6 @@ namespace KWShared{
                 for (auto cont = 0; cont < this->contentLength; cont++)
                     ret += this->contentBody[cont];
 
-                char endOfString = 0;
-                ret += endOfString;
                 return ret;
             }
     };
