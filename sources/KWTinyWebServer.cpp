@@ -38,7 +38,7 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "Kiwiisco embeded server, version 2.0.1";
+        this->__serverName = "KWTinyWebServer embeded server, version 2.0.1";
         //                                                     | | |
         //                                                     | | +------> Bugs fixes and compilation
         //                                                     | +--------> New features
