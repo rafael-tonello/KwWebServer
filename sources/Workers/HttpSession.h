@@ -64,7 +64,7 @@ namespace KWShared{
 
             void unload(HttpData* httpData){ }
 
-            void* setSessionData(HttpData* httpData, JSON session){
+            void setSessionData(HttpData* httpData, JSON session){
                 
                 string sessionFileName = getFileNameFromSsid(getSSID(httpData));
                 //write data to file
@@ -121,6 +121,8 @@ namespace KWShared{
 
                 //ensures 'ssid' cookie security
                 httpData->cookies["ssid"]->secure = false;
+
+                return ssid;
             }
     };
 }

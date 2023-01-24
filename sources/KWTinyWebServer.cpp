@@ -38,7 +38,7 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.0.2";
+        this->__serverName = "KWTinyWebServer embeded server, version 2.1.0";
         //                                                            | | |
         //                                                            | | +------> Bugs fixes and compilation
         //                                                            | +--------> New features
@@ -113,7 +113,7 @@ namespace KWShared
             {
                 //finalize websocket
                 clientsSessionsStates[client->socket]->webSocketState = WS_FINISHED;
-                WebSocketProcess(client, "", 0);
+                WebSocketProcess(client, (char*)"", 0);
             }
 
             clientsSessionsStates[client->socket]->receivedData.clear();
@@ -248,6 +248,8 @@ namespace KWShared
                                     sessionState->receivedData.contentLength = atoi(tempHeaderParts.at(1).c_str());
                                 else if (keyUpper == "CONTENT-TYPE")
                                     sessionState->receivedData.contentType = tempHeaderParts.at(1);
+                                else if (keyUpper == "ACCEPT")
+                                    sessionState->receivedData.accept = tempHeaderParts.at(1);
                                 else if (keyUpper == "CONNECTION")
                                     sessionState->connection = strUtils.toUpper(tempHeaderParts.at(1));
                                 else if (keyUpper == "UPGRADE")

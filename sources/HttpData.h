@@ -116,6 +116,7 @@ namespace KWShared{
             string resource = "";
             string method = "";
             string contentType = "";
+            string accept = "";
             char* contentBody = NULL;
             unsigned int contentLength = 0;
             vector< vector<string> > headers;
