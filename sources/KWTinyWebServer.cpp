@@ -58,7 +58,7 @@ namespace KWShared
 
         //star the TCPServer
         bool tcpServerStartResult = false;
-        this->server = new TCPServer(port, tcpServerStartResult, this->__tasks);
+        this->server = new TCPServer(port, tcpServerStartResult);
 
         if (!tcpServerStartResult)
         {
