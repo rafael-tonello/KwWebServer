@@ -819,7 +819,7 @@ namespace KWShared
     {
         // The buffer belllow is enought to contains the header in the all cases (2 bytes of information + max key
         //size, 64 bits)
-        char headerBuffer[10 + size] = {0};
+        char headerBuffer[10 + size];
         int headerSize = 0;
 
         //for this method, all packs will be send in one frame. So, determines the fin bit as true
