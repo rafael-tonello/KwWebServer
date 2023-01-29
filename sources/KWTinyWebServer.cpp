@@ -287,7 +287,10 @@ namespace KWShared
 
 
                     break;
+                default:
+                    break;
                 }
+                
             }
             cont++;
         }
@@ -481,6 +484,8 @@ namespace KWShared
                     "Server: " + this->__serverName + "\r\n"
                 );
                 sessionState->state = FINISHED;
+                break;
+            default:
                 break;
             }
             cont++;
@@ -684,6 +689,8 @@ namespace KWShared
                 case WS_PAYLOAD_NOT_MASKED:
                     sessionState->webSocketState = WS_FINISHED;
                 break;
+                default:
+                    break;
             }
         }
 
