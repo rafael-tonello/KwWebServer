@@ -29,10 +29,10 @@ namespace KWShared
         if (dataFolder == "_AUTO_DEFINE_" || dataFolder == "")
         {
             dataFolder = string(dirname((char *)(get_app_path().c_str()))) + "/data/www_data";
-
-            if (!this->sysLink.directoryExists(dataFolder))
-                this->sysLink.createDirectory(dataFolder);
         }
+        if (!this->sysLink.directoryExists(dataFolder))
+            this->sysLink.createDirectory(dataFolder);
+            
         if (this->__dataFolder.size() > 0 && this->__dataFolder[this->__dataFolder.size() - 1] != '/')
             this->__dataFolder += '/';
 
