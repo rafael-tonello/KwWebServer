@@ -824,65 +824,45 @@ namespace KWShared
 
     void KWTinyWebServer::sendWebSocketData(ClientInfo *cli, char *data, int size, bool isText)
     {
-        // The buffer belllow is enought to contains the header in the all cases (2 bytes of information + max key
-        //size, 64 bits)
-        char headerBuffer[10 + size];
-        int headerSize = 0;
+        char headerBuffer[14]; // O buffer de cabeçalho é grande o suficiente para acomodar o cabeçalho e tamanho máximo da carga útil.
+        int headerSize = 2; // Tamanho inicial do cabeçalho (sem estender para tamanhos maiores de carga útil).
 
-        //for this method, all packs will be send in one frame. So, determines the fin bit as true
-        headerBuffer[0] = headerBuffer[0] | 0b10000000;
+        // Defina o bit FIN (finalização) como verdadeiro (1).
+        headerBuffer[0] = 0b10000000;
 
-        //set opcode (0x01 means that data is a text, 0x02 means that data is binary)
-        headerBuffer[0] = isText ? headerBuffer[0] | 0b00000001 : headerBuffer[0] | 0b00000010;
+        // Defina o opcode (0x01 para dados de texto, 0x02 para dados binários).
+        headerBuffer[0] |= isText ? 0x01 : 0x02;
 
-        //al data sent by server must be unmasked so masked indicator bit (first bit of second byte) must be zero.
-        //in this case, we just no set this.
+        // Defina o bit MASK como 0, indicando que os dados não são mascarados.
+        headerBuffer[1] = size < 126 ? size : 126;
 
-        //if data size is less than 126, set this size in the last 7 bits of second byte. If the dataSize is bigget
-        //than 126, but less than 65535 (max value of an int16_t, word), set the last 7 bits of second byte with
-        //the value 126 and put the size in the next two bytes. If the data size if bigger than 65535, set the last
-        //7 bits of second byte with the value 127 and put the data size in the next 64 bits
-        if (size < 126)
+        if (size >= 126)
         {
-            uint8_t sizeI8 = size;
-            headerBuffer[1] = headerBuffer[1] | sizeI8;
-            headerSize = 2;
-        }
-        else if (size < 65536)
-        {
-            uint16_t sizeI16 = size;
-            char *sizeI16Buffer = (char *)&sizeI16;
-            headerBuffer[1] = headerBuffer[1] | 126;
-            headerBuffer[2] = sizeI16Buffer[1];
-            headerBuffer[3] = sizeI16Buffer[0];
-            headerSize = 4;
-        }
-        else
-        {
-            uint64_t sizeI64 = size;
-            char *sizeI64Buffer = (char *)&sizeI64;
-            headerBuffer[1] = headerBuffer[1] | 127;
-            headerBuffer[2] = sizeI64Buffer[7];
-            headerBuffer[3] = sizeI64Buffer[6];
-            headerBuffer[4] = sizeI64Buffer[5];
-            headerBuffer[5] = sizeI64Buffer[4];
-            headerBuffer[6] = sizeI64Buffer[3];
-            headerBuffer[7] = sizeI64Buffer[2];
-            headerBuffer[8] = sizeI64Buffer[1];
-            headerBuffer[9] = sizeI64Buffer[0];
-            headerSize = 10;
+            if (size < 65536)
+            {
+                headerBuffer[1] = 126; // Indique que o tamanho é maior que 125 bytes.
+                uint16_t size16 = static_cast<uint16_t>(size);
+                headerBuffer[2] = (size16 >> 8) & 0xFF;
+                headerBuffer[3] = size16 & 0xFF;
+                headerSize += 2;
+            }
+            else
+            {
+                headerBuffer[1] = 127; // Indique que o tamanho é maior que 65535 bytes.
+                uint64_t size64 = static_cast<uint64_t>(size);
+                for (int i = 2; i < 10; i++)
+                {
+                    headerBuffer[i] = (size64 >> ((9 - i) * 8)) & 0xFF;
+                }
+                headerSize += 8;
+            }
         }
 
-        for (int c = 0; c < size; c++)
-        {
-            headerBuffer[c + headerSize] = data[c];
-        }
+        // Envie o cabeçalho para o cliente.
+        cli->sendData(headerBuffer, headerSize);
 
-        //sendheader to client
-        cli->sendData(headerBuffer, headerSize + size);
-        //send(cli, headerBuffer, headerSize + size, 0);
-        //send data to client
-        //send(client, data, size, 0);
+        // Envie os dados da carga útil.
+        cli->sendData(data, size);
     }
 
     void KWTinyWebServer::sendWebSocketData(HttpData *originalRequest, char *data, int size, bool isText)
