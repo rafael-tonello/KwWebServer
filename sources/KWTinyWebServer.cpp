@@ -16,7 +16,14 @@ namespace KWShared
     bool __SocketIsConnected(int socket);
     string getFileETag(string fileName);
 
-    KWTinyWebServer::KWTinyWebServer(int port, WebServerObserver *observer, vector<string> filesLocations, string dataFolder, ThreadPool *tasker)
+    KWTinyWebServer::KWTinyWebServer(
+        int port, WebServerObserver *observer, 
+        vector<string> filesLocations, 
+        string dataFolder, 
+        ThreadPool *tasker, 
+        bool enableHttps,
+        string sslKey,
+        string sslPublicCert)
     {
         if (tasker != NULL)
         {
@@ -38,7 +45,7 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.1.0";
+        this->__serverName = "KWTinyWebServer embeded server, version 2.2.0";
         //                                                            | | |
         //                                                            | | +------> Bugs fixes and compilation
         //                                                            | +--------> New features
@@ -58,7 +65,21 @@ namespace KWShared
 
         //star the TCPServer
         bool tcpServerStartResult = false;
-        this->server = new TCPServer(port, tcpServerStartResult);
+        if (enableHttps)
+        {
+            this->server = new TCPServer();
+            auto initResult = this->server->startListen({
+                TCPServer::PortConf{
+                    .port = port,
+                    .ssl_tls = true,
+                    .private_cert = sslKey,
+                    .public_cert = sslPublicCert
+                }
+            });
+            tcpServerStartResult = initResult.startedPorts.size() > 0;
+        }
+        else
+            this->server = new TCPServer(port, tcpServerStartResult);
 
         if (!tcpServerStartResult)
         {
@@ -200,7 +221,7 @@ namespace KWShared
                     {
                         //a header was received
                         //process first line, that contains method and resource
-                        strUtils.split(bufferStr, " ", &tempHeaderParts);
+                        StringUtils::split(bufferStr, " ", &tempHeaderParts);
 
                         //checks if the first session line (GET /resource HTTP_Version) is valid
                         if (tempHeaderParts.size() > 1)
@@ -231,7 +252,7 @@ namespace KWShared
                         {
                             //remote the "\r\n" from bufferStr
                             bufferStr.erase(bufferStr.size() - 2, 2);
-                            strUtils.split(bufferStr, ":", &tempHeaderParts);
+                            StringUtils::split(bufferStr, ":", &tempHeaderParts);
 
                             //remove possible  ' ' from start of value
                             if (tempHeaderParts[1].size() > 0 && tempHeaderParts[1][0] == ' ')
@@ -239,7 +260,7 @@ namespace KWShared
 
                             if (tempHeaderParts.size() > 1)
                             {
-                                keyUpper = strUtils.toUpper(tempHeaderParts.at(0));
+                                keyUpper = StringUtils::toUpper(tempHeaderParts.at(0));
                                 tempHeaderParts[0] = keyUpper;
 
                                 sessionState->receivedData.headers.push_back(tempHeaderParts);
@@ -251,9 +272,9 @@ namespace KWShared
                                 else if (keyUpper == "ACCEPT")
                                     sessionState->receivedData.accept = tempHeaderParts.at(1);
                                 else if (keyUpper == "CONNECTION")
-                                    sessionState->connection = strUtils.toUpper(tempHeaderParts.at(1));
+                                    sessionState->connection = StringUtils::toUpper(tempHeaderParts.at(1));
                                 else if (keyUpper == "UPGRADE")
-                                    sessionState->upgrade = strUtils.toUpper(tempHeaderParts.at(1));
+                                    sessionState->upgrade = StringUtils::toUpper(tempHeaderParts.at(1));
                             }
 
                             //#%%%%%%%%%% pode ser que esta fun��o limpe os dados que est�o indo apra o receivedData
@@ -373,7 +394,7 @@ namespace KWShared
 
                         unsigned char sha1result[SHA_DIGEST_LENGTH];
                         SHA1((unsigned char *)concat.c_str(), concat.size(), sha1result);
-                        string secWebSocketBase64 = this->_strUtils.base64_encode(sha1result, SHA_DIGEST_LENGTH);
+                        string secWebSocketBase64 = StringUtils::base64_encode(sha1result, SHA_DIGEST_LENGTH);
 
                         //prepare the http response to client
                         sessionState->dataToSend.httpStatus = 101;
@@ -461,9 +482,6 @@ namespace KWShared
                 //convert raw buffer to char*
 
                 sessionState->dataToSend.clear();
-                
-                if (!sessionState->webSocketOpen)
-                    sessionState->receivedData.clear();
 
                 sessionState->state = FINISH_REQUEST;
 
@@ -497,10 +515,27 @@ namespace KWShared
                 this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
             else
             {
-                sessionState->receivedData.clear();
-                client->disconnect();
+                if (isToKeepAlive(sessionState))
+                {
+                    sessionState->receivedData.clear();
+                    delete sessionState;
+
+                    initializeClient(client);
+                    sessionState = clientsSessionsStates[client->socket];
+                }
+                else
+                {
+                    client->disconnect();
+                    sessionState->receivedData.clear();
+                }
+
             }
         }
+    }
+
+    bool KWTinyWebServer::isToKeepAlive(KWClientSessionState* sessionState)
+    {
+        return sessionState->connection.find("KEEP-ALIVE") != string::npos;
     }
 
     void KWTinyWebServer::WebSocketProcess(ClientInfo* client, char* data, size_t dataSize)
@@ -714,7 +749,7 @@ namespace KWShared
         if (fName == "/")
             fName = "index.html";
 
-        string fNameUpper = strUtils.toUpper(fName);
+        string fNameUpper = StringUtils::toUpper(fName);
 
         //remove '/' chrar from start of fName
         if (fName[0] == '/')
@@ -739,7 +774,7 @@ namespace KWShared
                 time = gmtime(&(attrib.st_mtime));
                 strftime(dtStr, 256, "%a, %d %b %Y %T GMT", time);
                 string lastModificationTime(dtStr);
-                string ETag = this->_strUtils.base64_encode((unsigned char *)lastModificationTime.c_str(), lastModificationTime.size());
+                string ETag = StringUtils::base64_encode((unsigned char *)lastModificationTime.c_str(), lastModificationTime.size());
 
                 //checks if browseris just browser is just checking by modifications in the resource
                 string ifNoneMatchHeader = "";

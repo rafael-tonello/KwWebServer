@@ -132,7 +132,6 @@ namespace KWShared{
         }
     };
 
-
     class KWTinyWebServer
     {
         public:
@@ -141,7 +140,10 @@ namespace KWShared{
                 WebServerObserver *observer,
                 vector<string> filesLocations,
                 string dataFolder = "_AUTO_DEFINE_",
-                ThreadPool* tasker = NULL
+                ThreadPool* tasker = NULL,
+                bool enableHttps = false,
+                string sslKey = "",
+                string sslPublicCert = ""
             );
 
             virtual ~KWTinyWebServer();
@@ -151,6 +153,7 @@ namespace KWShared{
             void broadcastWebSocker(char* data, int size, bool isText, string resource = "*");
             void disconnecteWebSocket(ClientInfo* client);
             void disconnecteWebSocket(HttpData* originalRequest);
+
 
             void __TryAutoLoadFiles(HttpData* in, HttpData* out);
             WebServerObserver *__observer;
@@ -163,7 +166,6 @@ namespace KWShared{
 
 
             string getDataFolder(){ return this->__dataFolder; }
-            StringUtils _strUtils;
 
             void addWorker(IWorker* worker);
             vector<IWorker*> __workers = {
@@ -175,13 +177,14 @@ namespace KWShared{
             vector<string> __filesLocations;
             string get_app_path();
             SysLink sysLink;
-            StringUtils strUtils;
             TCPServer* server;
 
             void initializeClient(ClientInfo* client);
             void finalizeClient(ClientInfo* client);
             void dataReceivedFrom(ClientInfo* client, char* data, size_t dataSize);
             void WebSocketProcess(ClientInfo* client, char* data, size_t dataSize);
+        
+            static bool isToKeepAlive(KWClientSessionState* sessionState);
     };
 }
 #endif

@@ -11,16 +11,16 @@ namespace KWShared{
         public:
             StringUtils();
 
-            void split(string str,string sep, vector<string> *result);
-            string toUpper(string source);
-            string toLower(string source);
-            string base64_encode(unsigned char * buf, unsigned int bufLen);
-            unsigned char* base64_decode(std::string const& encoded_string);
-            string formatDate (time_t dateAndTime);
+            static void split(string str,string sep, vector<string> *result);
+            static string toUpper(string source);
+            static string toLower(string source);
+            static string base64_encode(unsigned char * buf, unsigned int bufLen);
+            static unsigned char* base64_decode(std::string const& encoded_string);
+            static string formatDate (time_t dateAndTime);
 
-            string ltrim(string s);
-            string rtrim(string s);
-            string trim(string s);
+            static string ltrim(string s);
+            static string rtrim(string s);
+            static string trim(string s);
     };
 
     static const std::string base64_chars ="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
