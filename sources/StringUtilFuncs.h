@@ -1,5 +1,5 @@
-#ifndef STRINGUTILS_H
-#define STRINGUTILS_H
+#ifndef STRINGUTILFUNCS_H
+#define STRINGUTILFUNCS_H
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -27,4 +27,4 @@ namespace KWShared{
     static const std::string base64_chars ="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 }
 
-#endif // STRINGUTILS_H
+#endif // KWSTRINGUTILFUNCS_H

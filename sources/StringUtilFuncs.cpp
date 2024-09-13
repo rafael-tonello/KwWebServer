@@ -1,4 +1,4 @@
-#include "StringUtils.h"
+#include "StringUtilFuncs.h"
 
 
 namespace KWShared{

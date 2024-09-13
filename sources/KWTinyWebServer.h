@@ -45,7 +45,7 @@
 
 #include "SysLink.h"
 #include "HttpData.h"
-#include "StringUtils.h"
+#include "StringUtilFuncs.h"
 #include "IWorker.h"
 #include "Workers/CookieParser.h"
 #include <libgen.h>
