@@ -69,12 +69,7 @@ namespace KWShared
         {
             this->server = new TCPServer();
             auto initResult = this->server->startListen({
-                TCPServer::PortConf{
-                    .port = port,
-                    .ssl_tls = true,
-                    .private_cert = sslKey,
-                    .public_cert = sslPublicCert
-                }
+                TCPServer_PortConf(port, "", true, sslKey, sslPublicCert)
             });
             tcpServerStartResult = initResult.startedPorts.size() > 0;
         }
