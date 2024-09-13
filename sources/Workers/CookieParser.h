@@ -2,7 +2,7 @@
 #define COOKIEPARSER_H
 
 #include <IWorker.h>
-#include <StringUtils.h>
+#include "../StringUtils.h"
 #include <iostream>
 namespace KWShared{
     using namespace std;
