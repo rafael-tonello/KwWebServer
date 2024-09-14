@@ -69,7 +69,7 @@ namespace KWShared
         {
             this->server = new TCPServer();
             auto initResult = this->server->startListen({
-                TCPServer_PortConf(port, "", true, sslKey, sslPublicCert)
+                shared_ptr<TCPServer_SocketInputConf>(new TCPServer_PortConf(port, "", true, sslKey, sslPublicCert))
             });
             tcpServerStartResult = initResult.startedPorts.size() > 0;
         }
@@ -965,5 +965,4 @@ namespace KWShared
         this->__workers.push_back(worker);
         worker->start(this);
     }
-
 }
