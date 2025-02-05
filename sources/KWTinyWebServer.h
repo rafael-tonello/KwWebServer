@@ -108,6 +108,8 @@ namespace KWShared{
         bool webSocketOpen = false;
         WebSocketStates webSocketState = WebSocketStates::WS_READING_PACK_INFO_1;
 
+        bool ignoreKeepAlive = false;
+
 
         int ws_tempIndex = 0;
         char ws_packSize7bit;

@@ -45,7 +45,7 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.2.0";
+        this->__serverName = "KWTinyWebServer embeded server, version 2.2.1";
         //                                                            | | |
         //                                                            | | +------> Bugs fixes and compilation
         //                                                            | +--------> New features
@@ -96,7 +96,9 @@ namespace KWShared
         this->server->addReceiveListener(
             [this](ClientInfo *client, char *data, size_t dataSize)
             {
-                this->dataReceivedFrom(client, data, dataSize);
+                //this->__tasks->enqueue([=](){
+                    this->dataReceivedFrom(client, data, dataSize);
+                //});
             }
         );
     }
@@ -180,8 +182,11 @@ namespace KWShared
     {
 
         if (clientsSessionsStates.count(client->socket) <= 0)
+        {
+            cerr << "received data from a not initialized client" << endl;
             return;
             //throw std::runtime_error("data received for a no intialized client");
+        }
 
         KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
 
@@ -230,6 +235,7 @@ namespace KWShared
                         {
                             sessionState->internalServerErrorMessage = "Invalid HTTP request";
                             sessionState->state = ERROR_500_INTERNALSERVERERROR;
+                            sessionState->ignoreKeepAlive = true;
                             break;
                         }
 
@@ -317,6 +323,7 @@ namespace KWShared
             sessionState->dataToSend.httpStatus = 101;
             sessionState->receivedData.httpStatus = 101;
         }
+
         while (sessionState->state != FINISHED)
         {
             sessionState->prevState = sessionState->state;
@@ -355,6 +362,7 @@ namespace KWShared
                     sessionState->dataToSend.httpStatus = 404;
                     sessionState->dataToSend.httpMessage = "Not found";
                     sessionState->dataToSend.contentLength = 0;
+                    sessionState->ignoreKeepAlive = true;
                 }
 
                 for (auto &curr : this->__workers)
@@ -510,7 +518,7 @@ namespace KWShared
                 this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
             else
             {
-                if (isToKeepAlive(sessionState))
+                if (isToKeepAlive(sessionState) && !sessionState->ignoreKeepAlive)
                 {
                     sessionState->receivedData.clear();
                     delete sessionState;
