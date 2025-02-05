@@ -96,9 +96,9 @@ namespace KWShared
         this->server->addReceiveListener(
             [this](ClientInfo *client, char *data, size_t dataSize)
             {
-                //this->__tasks->enqueue([=](){
+                this->__tasks->enqueue([=](){
                     this->dataReceivedFrom(client, data, dataSize);
-                //});
+                });
             }
         );
     }
