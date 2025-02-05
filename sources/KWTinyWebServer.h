@@ -160,7 +160,6 @@ namespace KWShared{
 
             void __TryAutoLoadFiles(HttpData* in, HttpData* out);
             WebServerObserver *__observer;
-            string __serverName;
             string __dataFolder;
             ThreadPool * __tasks;
 
@@ -174,7 +173,37 @@ namespace KWShared{
             vector<IWorker*> __workers = {
                 new CookieParser()
             };
+
+            //changes the server info. The server info is sen to the clients as the header 'Server'
+            void setServerInfo(string newServerInfo){
+                this->_serverInfo = newServerInfo;
+            }
+
+            //get the current server infor. Initially the server info is the concatenation of _serverName and _serverVersion
+            string getServerInfo(){
+                return this->_serverInfo;
+            }
+
+            //returns the server name (the string 'KWTinyWebServer embeded server')
+            string getServerName(){
+                return this->_serverName;
+            }
+
+            //returns the server version of KWtinyWebServer
+            string getServerVersion(){
+                return this->_serverVersion;
+            }
         private:
+            //server info is setted in the contructor as the concatenation of _serverName and _serverVersion. 
+            //this can be changed be callling the method 'setServerInfo'
+            string _serverInfo;
+            
+            const string _serverName = "KWTinyWebServer embeded server";
+            const string _serverVersion = "2.2.1";
+            //                       | | |
+            //                       | | +------> Bugs fixes and compilation
+            //                       | +--------> New features
+            //
             mutex clientsSessionsStatesMutex;
             map<int, KWClientSessionState*> clientsSessionsStates;
             vector<string> __filesLocations;

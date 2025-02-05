@@ -25,6 +25,8 @@ namespace KWShared
         string sslKey,
         string sslPublicCert)
     {
+        this->setServerInfo(this->_serverName+ ", version " + this->_serverVersion);
+
         if (tasker != NULL)
         {
             cout << "using a custom tasker for httpserver" << endl;
@@ -45,11 +47,6 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.2.1";
-        //                                                            | | |
-        //                                                            | | +------> Bugs fixes and compilation
-        //                                                            | +--------> New features
-        //                                                            +----------> Big changes, architecture changes and incompatibilities
         this->__observer = observer;
         this->__filesLocations = filesLocations;
 //ctor
@@ -450,7 +447,7 @@ namespace KWShared
                     " " +
                     sessionState->dataToSend.httpMessage + 
                     "\r\n" +
-                    "Server: " + this->__serverName + "\r\n"
+                    "Server: " + this->getServerInfo() + "\r\n"
                 );
 
                 //send content identification headers
@@ -495,14 +492,14 @@ namespace KWShared
             case ERROR_400_BADREQUEST:
                 client->sendString(
                     string("HTTP/1.1 400 Bad request \r\n") +
-                    string("Server: ") + this->__serverName + string("\r\n")
+                    string("Server: ") + this->getServerInfo() + string("\r\n")
                 );
                 sessionState->state = FINISHED;
                 break;
             case ERROR_500_INTERNALSERVERERROR:
                 client->sendString(
                     "HTTP/1.1 500 "+sessionState->internalServerErrorMessage+" \r\n" +
-                    "Server: " + this->__serverName + "\r\n"
+                    "Server: " + this->getServerInfo() + "\r\n"
                 );
                 sessionState->state = FINISHED;
                 break;
