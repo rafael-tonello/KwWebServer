@@ -27,7 +27,7 @@ namespace KWShared{
                     if (headerUpper == "COOKIE")
                     {
                         //void split(string str,string sep, vector<string> *result);
-                        this->strUtils.split(httpData->headers[i][1], ";", &temp1);
+                        temp1 = this->strUtils.split(httpData->headers[i][1], ";");
 
                         for (auto &currKeyValue: temp1)
                         {

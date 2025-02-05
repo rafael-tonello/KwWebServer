@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <ctime>
 
+#include <iostream>
+
 namespace KWShared{
     using namespace std;
     class StringUtils
@@ -12,7 +14,7 @@ namespace KWShared{
         public:
             StringUtils();
 
-            static void split(string str,string sep, vector<string> *result);
+            static vector<string> split(string str,string sep);
             static string toUpper(string source);
             static string toLower(string source);
             static string base64_encode(unsigned char * buf, unsigned int bufLen);

@@ -7,42 +7,21 @@ namespace KWShared{
         //ctor
     }
 
-    void StringUtils::split(string str,string sep, vector<string> *result)
+    vector<string> StringUtils::split(string str,string sep)
     {
-         str += "\0";
-         /*char* cstr=const_cast<char*>(str.c_str());
-         char* current = NULL;
-         current=strtok(cstr,sep.c_str());
-         while(current!=NULL){
-             if (!current)
-                 delete[] current;
-             result->push_back(current);
-             current=strtok(NULL,sep.c_str());
-         }
+        vector<string> result;
+        size_t pos = str.find(sep);
+        while (pos != string::npos)
+        {
+          result.push_back(str.substr(0, pos));
+          str = str.substr(pos+1);
+          std::cout << "str = " << str << std::endl;
+          pos = str.find(sep);
+        }
+        if (str != "")
+          result.push_back(str);
 
-         //delete[] cstr;
-         str.clear();
-         sep.clear();*/
-
-         //return result;
-         string tmp;
-         size_t nextIndex = -1;
-         while (true)
-         {
-            nextIndex = str.find(sep);
-            if (nextIndex != string::npos)
-            {
-                result->push_back(str.substr(0, nextIndex));
-                if (nextIndex + 1 < str.size())
-                    str = str.substr(nextIndex+1);
-            }
-            else
-                break;
-         }
-
-         result->push_back(str);
-         str.clear();
-         sep.clear();
+        return result;
     }
 
     std::string StringUtils::toUpper(std::string source)

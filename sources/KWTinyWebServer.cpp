@@ -217,11 +217,12 @@ namespace KWShared
                 {
                 case AWAIT_HTTP_FIRST_LINE:
                     bufferStr += data[cont];
+                    cout << bufferStr << endl;
                     if (bufferStr.find("\r\n") != string::npos)
                     {
                         //a header was received
                         //process first line, that contains method and resource
-                        StringUtils::split(bufferStr, " ", &tempHeaderParts);
+                        tempHeaderParts = StringUtils::split(bufferStr, " ");
 
                         //checks if the first session line (GET /resource HTTP_Version) is valid
                         if (tempHeaderParts.size() > 1)
@@ -253,7 +254,7 @@ namespace KWShared
                         {
                             //remote the "\r\n" from bufferStr
                             bufferStr.erase(bufferStr.size() - 2, 2);
-                            StringUtils::split(bufferStr, ":", &tempHeaderParts);
+                            tempHeaderParts = StringUtils::split(bufferStr, ":");
 
                             //remove possible  ' ' from start of value
                             if (tempHeaderParts[1].size() > 0 && tempHeaderParts[1][0] == ' ')
@@ -278,7 +279,6 @@ namespace KWShared
                                     sessionState->upgrade = StringUtils::toUpper(tempHeaderParts.at(1));
                             }
 
-                            //#%%%%%%%%%% pode ser que esta fun��o limpe os dados que est�o indo apra o receivedData
                             tempHeaderParts.clear();
                         }
                         else

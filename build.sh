@@ -29,7 +29,7 @@ cp -r sources/copyToBinaryDir/* build/
 
 #the c++ command line
 #cpp_cmd="g++ -std=c++17 -ggdb"
-cpp_cmd="clang++ -std=c++17 -ggdb"
+cpp_cmd="clang++ -std=c++17 -ggdb -O3"
 cpp_aditional_args="-lssl -lcrypto -lpthread"
 
 clear
