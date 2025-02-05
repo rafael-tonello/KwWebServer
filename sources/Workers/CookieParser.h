@@ -16,28 +16,24 @@ namespace KWShared{
                 cookies information and uses this information to populate the 'cookies' property of the'
                 httpData*/
 
-                string headerUpper;
-                vector<string> temp1;
-                string tempKey, tempValue;
-                //pass over all headers
+                //go over all headers looking for cookies
                 for (auto i = 0; i < httpData->headers.size(); i++)
                 {
-                    headerUpper = this->strUtils.toUpper((httpData->headers[i][0]));
+                    auto headerUpper = this->strUtils.toUpper((httpData->headers[i][0]));
                     //checks if the current hreader is a cookie information
                     if (headerUpper == "COOKIE")
                     {
-                        //void split(string str,string sep, vector<string> *result);
-                        temp1 = this->strUtils.split(httpData->headers[i][1], ";");
+                        auto cookieData = this->strUtils.split(httpData->headers[i][1], ";");
 
-                        for (auto &currKeyValue: temp1)
+                        for (auto &currKeyValue: cookieData)
                         {
-                            //checks for a valid keyValue pair
+                            //checks fif current data is a valid key=Value pair
                             auto equalPos = currKeyValue.find("=");
                             if (equalPos != string::npos)
                             {
                                 //gets the key and the value of current cookie
-                                tempKey = this->strUtils.toLower(currKeyValue.substr(0, equalPos));
-                                tempValue = this->strUtils.toLower(currKeyValue.substr(equalPos+1));
+                                auto tempKey = this->strUtils.toLower(currKeyValue.substr(0, equalPos));
+                                auto tempValue = this->strUtils.toLower(currKeyValue.substr(equalPos+1));
 
                                 //trim key and value
                                 tempKey = this->strUtils.trim(tempKey);
@@ -45,9 +41,7 @@ namespace KWShared{
 
                                 //save cookie in the httpData object
                                 if (!httpData->cookies.count(tempKey))
-                                {
                                     httpData->cookies[tempKey] = new HttpCookie();
-                                }
 
                                 httpData->cookies[tempKey]->key = tempKey;
                                 httpData->cookies[tempKey]->value = tempValue;
@@ -58,11 +52,10 @@ namespace KWShared{
             }
 
             void unload(HttpData* httpData){
-                string tempCookieData = "";
                 for (auto & curr: httpData->cookies)
                 {
 
-                    tempCookieData = curr.second->key + "=" + curr.second->value;
+                    string tempCookieData = curr.second->key + "=" + curr.second->value;
 
 
                     if (curr.second->maxAgeSeconds > 0)

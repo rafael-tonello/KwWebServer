@@ -6,6 +6,8 @@
 #include <KWTinyWebServer.h>
 #include <IWorker.h>
 
+//this class allow the use of a JSON object to store data of a session. A session is identified by a unique id (ssid) that is stored in a cookie.
+//TODO: Move implementation to the cpp file
 
 namespace KWShared{
     using namespace JsonMaker;
