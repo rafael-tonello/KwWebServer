@@ -361,8 +361,7 @@ void KWWebServerRouter::extractUrlVars(string url, map<string, string>& vars)
     {
         url = url.substr(url.find("?")+1);
 
-        vector<string> varsAndValues;
-        strUtils.split(url, "=", &varsAndValues);
+        vector<string> varsAndValues = strUtils.split(url, "=");
 
         for (auto &c: varsAndValues)
         {
