@@ -62,7 +62,8 @@ namespace KWShared{
     //typedef void (*OnClientDataSend)(HttpData* in, HttpData* out);
 
     enum States {
-        AWAIT_HTTP_FIRST_LINE, 
+        READING_VERB,
+        AWAIT_REMAIN_OF_HTTP_FIRST_LINE, 
         READING_HEADER, 
         AWAIT_CONTENT, 
         SEND_REQUEST_TO_APP, 
@@ -72,7 +73,8 @@ namespace KWShared{
         FINISH_REQUEST, 
         FINISHED, 
         ERROR_400_BADREQUEST, 
-        ERROR_500_INTERNALSERVERERROR
+        ERROR_500_INTERNALSERVERERROR,
+        ERROR_501_NOT_IMPLEMENTED
     };
 
     enum WebSocketStates{
@@ -100,16 +102,19 @@ namespace KWShared{
         string internalServerErrorMessage = "";
         ClientInfo* client = nullptr;
         HttpData receivedData, dataToSend;
-        States state = AWAIT_HTTP_FIRST_LINE;
-        States prevState = AWAIT_HTTP_FIRST_LINE;
+        States state = READING_VERB;
+        States prevState = READING_VERB;
         string connection = "";
         string upgrade = "";
         unsigned int currentContentLength = 0;
         bool webSocketOpen = false;
         WebSocketStates webSocketState = WebSocketStates::WS_READING_PACK_INFO_1;
 
-        bool ignoreKeepAlive = false;
 
+        string bufferStr = "";
+        vector<string> tempHeaderParts;
+        
+        bool ignoreKeepAlive = false;
 
         int ws_tempIndex = 0;
         char ws_packSize7bit;

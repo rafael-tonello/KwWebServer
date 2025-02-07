@@ -91,11 +91,14 @@ namespace KWShared
         );
 
         this->server->addReceiveListener(
-            [this](ClientInfo *client, char *data, size_t dataSize)
+            [=](ClientInfo *client, char *data, size_t dataSize)
             {
-                this->__tasks->enqueue([=](){
-                    this->dataReceivedFrom(client, data, dataSize);
-                });
+                auto tmpData = new char[dataSize];
+                memcpy(tmpData, data, dataSize);
+                //this->__tasks->enqueue([=](){
+                    this->dataReceivedFrom(client, tmpData, dataSize);
+                    delete[] tmpData;
+                //});
             }
         );
     }
@@ -108,6 +111,8 @@ namespace KWShared
 
     void KWTinyWebServer::initializeClient(ClientInfo *client)
     {
+        if (clientsSessionsStates.count(client->socket) > 0)
+            delete clientsSessionsStates[client->socket];
         auto tmp = new KWClientSessionState();
         tmp->client = client;
         tmp->receivedData.client = client;
@@ -134,8 +139,8 @@ namespace KWShared
             clientsSessionsStates[client->socket]->receivedData.clear();
             clientsSessionsStates[client->socket]->dataToSend.clear();
 
-            //does not delete the clie here. It will be deleteted by the TCPServer lib
-            delete clientsSessionsStates[client->socket];
+            //do not delete the clie here. It will be deleteted by the TCPServer lib
+            //delete clientsSessionsStates[client->socket];
 
 
             clientsSessionsStates.erase(client->socket);
@@ -185,16 +190,14 @@ namespace KWShared
             //throw std::runtime_error("data received for a no intialized client");
         }
 
+        const string validVerbCharacters="ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+
         KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
 
         string keyUpper = "";
         char dtStr[256];
         time_t t;
         struct tm *timep;
-        string bufferStr = "";
-        vector<string> tempHeaderParts;
-
-       
 
         if (sessionState->webSocketOpen)
         {
@@ -206,77 +209,146 @@ namespace KWShared
 
         size_t cont = 0;
 
-        while ((sessionState->state != SEND_REQUEST_TO_APP) && (sessionState->state != ERROR_500_INTERNALSERVERERROR) && (sessionState->state != FINISHED) && cont < dataSize)
+        while (
+            (sessionState->state != SEND_REQUEST_TO_APP) 
+            && (sessionState->state != ERROR_500_INTERNALSERVERERROR) 
+            && (sessionState->state != ERROR_501_NOT_IMPLEMENTED) 
+            && (sessionState->state != FINISHED) 
+            && cont < dataSize
+        )
         {
             sessionState->prevState = sessionState->state;
             {
                 switch (sessionState->state)
                 {
-                case AWAIT_HTTP_FIRST_LINE:
-                    bufferStr += data[cont];
-                    cout << bufferStr << endl;
-                    if (bufferStr.find("\r\n") != string::npos)
+                case READING_VERB:
+                    if (data[cont] == ' ')
                     {
-                        //a header was received
-                        //process first line, that contains method and resource
-                        tempHeaderParts = StringUtils::split(bufferStr, " ");
-
-                        //checks if the first session line (GET /resource HTTP_Version) is valid
-                        if (tempHeaderParts.size() > 1)
+                        bool valid = true;
+                        for (unsigned int cont2 = 0; cont2 < sessionState->bufferStr.size(); cont2++)
                         {
+                            if (validVerbCharacters.find(sessionState->bufferStr[cont2]) == string::npos)
+                            {
+                                this->debug("Client sent a invalid verb: " + sessionState->bufferStr);
+                                sessionState->internalServerErrorMessage = "Invalid HTTP request";
+                                sessionState->state = ERROR_400_BADREQUEST;
+                                sessionState->ignoreKeepAlive = true;
+                                valid = false;
+                                break;
+                            }
+                        }
 
-                            sessionState->receivedData.method = tempHeaderParts.at(0);
-                            sessionState->receivedData.resource = tempHeaderParts.at(1);
-                            sessionState->receivedData.contentLength = 0;
+                        if (valid){
+                            sessionState->receivedData.method = sessionState->bufferStr;
+                            //a header was received
+                            sessionState->state = AWAIT_REMAIN_OF_HTTP_FIRST_LINE;
+                            sessionState->bufferStr.clear();
+                        }
+                    }
+                    //just a security to avoid a infinite loops.
+                    else if (sessionState->bufferStr.size() > 30) 
+                    {
+                        //TODO: \026\003\001 may be the client trying to do a SSL connection
+                        if (sessionState->bufferStr.find("\026\003\001") != string::npos)
+                        {
+                            this->debug("Maybe the client is trying to do a SSL connection. This instance of the HTTP server was not started with SSL support");
+                            sessionState->internalServerErrorMessage = "SSL connection not supported because this instance of the server was not started with SSL support";
+                            sessionState->state = ERROR_400_BADREQUEST;
+                            sessionState->ignoreKeepAlive = true;
                         }
                         else
                         {
+                            this->debug("Client sent a too long verb: " + sessionState->bufferStr);
+                            sessionState->internalServerErrorMessage = "Invalid HTTP request";
+                            sessionState->state = ERROR_400_BADREQUEST;
+                            sessionState->ignoreKeepAlive = true;
+                        }
+                    }
+                    else
+                        sessionState->bufferStr += data[cont];
+                
+                    break;
+                case AWAIT_REMAIN_OF_HTTP_FIRST_LINE:
+                    sessionState->bufferStr += data[cont];
+                    cout << sessionState->bufferStr << endl;
+
+
+
+                    if (sessionState->bufferStr.find("\r\n") != string::npos)
+                    {
+                        //a header was received
+                        //process first line, that contains method and resource
+                        sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, " ");
+
+                        //checks if the first session line (GET /resource HTTP_Version) is valid
+                        if (sessionState->tempHeaderParts.size() > 1)
+                        {
+
+                            
+                            sessionState->receivedData.resource = sessionState->tempHeaderParts.at(0);
+                            auto httpVersion = sessionState->tempHeaderParts.at(1);
+                            sessionState->receivedData.contentLength = 0;
+				
+                            if (StringUtils::toUpper(httpVersion) != string("HTTP/1.1\r\n"))
+                            {
+                                this->debug("Client sent a invalid HTTP version: " + httpVersion);
+                                sessionState->internalServerErrorMessage = "Invalid HTTP version (only HTTP/1.1 is supported)";
+                                sessionState->state = ERROR_501_NOT_IMPLEMENTED;
+                                sessionState->ignoreKeepAlive = true;
+                                break;
+                            }
+                            
+                        }
+                        else
+                        {
+                            this->debug("Client sent a invalid HTTP request: " + sessionState->bufferStr);
                             sessionState->internalServerErrorMessage = "Invalid HTTP request";
                             sessionState->state = ERROR_500_INTERNALSERVERERROR;
                             sessionState->ignoreKeepAlive = true;
                             break;
                         }
 
-                        bufferStr.clear();
+                        sessionState->bufferStr.clear();
 
                         //start read headers
                         sessionState->state = READING_HEADER;
-                    };
+                    }
+
                     break;
                 case READING_HEADER:
-                    bufferStr += data[cont];
-                    if (bufferStr.find("\r\n") != string::npos)
+                    sessionState->bufferStr += data[cont];
+                    if (sessionState->bufferStr.find("\r\n") != string::npos)
                     {
-                        if (bufferStr != "\r\n")
+                        if (sessionState->bufferStr != "\r\n")
                         {
-                            //remote the "\r\n" from bufferStr
-                            bufferStr.erase(bufferStr.size() - 2, 2);
-                            tempHeaderParts = StringUtils::split(bufferStr, ":");
+                            //remote the "\r\n" from sessionState->bufferStr
+                            sessionState->bufferStr.erase(sessionState->bufferStr.size() - 2, 2);
+                            sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, ":");
 
                             //remove possible  ' ' from start of value
-                            if (tempHeaderParts[1].size() > 0 && tempHeaderParts[1][0] == ' ')
-                                tempHeaderParts[1].erase(0, 1);
+                            if (sessionState->tempHeaderParts[1].size() > 0 && sessionState->tempHeaderParts[1][0] == ' ')
+                                sessionState->tempHeaderParts[1].erase(0, 1);
 
-                            if (tempHeaderParts.size() > 1)
+                            if (sessionState->tempHeaderParts.size() > 1)
                             {
-                                keyUpper = StringUtils::toUpper(tempHeaderParts.at(0));
-                                tempHeaderParts[0] = keyUpper;
+                                keyUpper = StringUtils::toUpper(sessionState->tempHeaderParts.at(0));
+                                sessionState->tempHeaderParts[0] = keyUpper;
 
-                                sessionState->receivedData.headers.push_back(tempHeaderParts);
+                                sessionState->receivedData.headers.push_back(sessionState->tempHeaderParts);
 
                                 if (keyUpper == "CONTENT-LENGTH")
-                                    sessionState->receivedData.contentLength = atoi(tempHeaderParts.at(1).c_str());
+                                    sessionState->receivedData.contentLength = atoi(sessionState->tempHeaderParts.at(1).c_str());
                                 else if (keyUpper == "CONTENT-TYPE")
-                                    sessionState->receivedData.contentType = tempHeaderParts.at(1);
+                                    sessionState->receivedData.contentType = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "ACCEPT")
-                                    sessionState->receivedData.accept = tempHeaderParts.at(1);
+                                    sessionState->receivedData.accept = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "CONNECTION")
-                                    sessionState->connection = StringUtils::toUpper(tempHeaderParts.at(1));
+                                    sessionState->connection = StringUtils::toUpper(sessionState->tempHeaderParts.at(1));
                                 else if (keyUpper == "UPGRADE")
-                                    sessionState->upgrade = StringUtils::toUpper(tempHeaderParts.at(1));
+                                    sessionState->upgrade = StringUtils::toUpper(sessionState->tempHeaderParts.at(1));
                             }
 
-                            tempHeaderParts.clear();
+                            sessionState->tempHeaderParts.clear();
                         }
                         else
                         {
@@ -291,7 +363,7 @@ namespace KWShared
                             }
                         }
 
-                        bufferStr.clear();
+                        sessionState->bufferStr.clear();
                     }
 
                     break;
@@ -316,9 +388,19 @@ namespace KWShared
 
         if (sessionState->connection.find("UPGRADE") != string::npos && sessionState->upgrade.find("WEBSOCKET") != string::npos)
         {
-
             sessionState->dataToSend.httpStatus = 101;
             sessionState->receivedData.httpStatus = 101;
+        }
+
+        //check if first part (read of headers and content) of the request is finished
+        if (
+            sessionState->state == READING_VERB
+            || sessionState->state == AWAIT_REMAIN_OF_HTTP_FIRST_LINE
+            || sessionState->state == READING_HEADER
+            || sessionState->state == AWAIT_CONTENT
+        )
+        {
+            return;
         }
 
         while (sessionState->state != FINISHED)
@@ -503,7 +585,19 @@ namespace KWShared
                 );
                 sessionState->state = FINISHED;
                 break;
+            case ERROR_501_NOT_IMPLEMENTED:
+                client->sendString(
+                    "HTTP/1.1 501 "+sessionState->internalServerErrorMessage+" \r\n" +
+                    "Server: " + this->getServerInfo() + "\r\n"
+                );
+                sessionState->state = FINISHED;
+                break;
             default:
+                client->sendString(
+                    "HTTP/1.1 500 Server entered in a invalid state: "+to_string((int)sessionState->state)+" \r\n" +
+                    "Server: " + this->getServerInfo() + "\r\n"
+                );
+                sessionState->state = FINISHED;
                 break;
             }
             cont++;
@@ -517,16 +611,15 @@ namespace KWShared
             {
                 if (isToKeepAlive(sessionState) && !sessionState->ignoreKeepAlive)
                 {
-                    sessionState->receivedData.clear();
-                    delete sessionState;
-
+                    //delete sessionState;
+                    finalizeClient(client);
                     initializeClient(client);
                     sessionState = clientsSessionsStates[client->socket];
                 }
                 else
                 {
                     client->disconnect();
-                    sessionState->receivedData.clear();
+                    //Cliente is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
                 }
 
             }
