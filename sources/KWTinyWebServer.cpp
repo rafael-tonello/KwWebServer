@@ -93,20 +93,31 @@ namespace KWShared
         this->server->addReceiveListener(
             [=](ClientInfo *client, char *data, size_t dataSize)
             {
-                auto tmpData = new char[dataSize];
-                memcpy(tmpData, data, dataSize);
-                this->__tasks->enqueue([=](){
-                    if (this->clientsSessionsStates.count(client->socket) <= 0)
-                    {
-                        cerr << "received data from a not initialized client" << endl;
-                        client->disconnect();
-                        return;
-                        //throw std::runtime_error("data received for a no intialized client");
-                    }
+                if (this->clientsSessionsStates.count(client->socket) <= 0)
+                {
+                    client->disconnect();
+                    return;
+                    //throw std::runtime_error("data received for a no intialized client");
+                }
 
-                    this->dataReceivedFrom(client, tmpData, dataSize);
-                    delete[] tmpData;
-                });
+                auto clientState = this->clientsSessionsStates[client->socket];
+
+                clientState->incomingDataLocker.lock();
+                //apend incoming data to clientState->incomingDataBuffer
+                for (size_t cont = 0; cont < dataSize; cont++)
+                    clientState->incomingDataBuffer.push(data[cont]);
+                
+
+                if (!clientState->processingIncomingData)
+                {
+                    clientState->processingIncomingData = true;
+                    
+                    this->__tasks->enqueue([=](){
+                        this->dataReceivedFrom(client);
+                        clientState->processingIncomingData = false;
+                    });
+                }
+                clientState->incomingDataLocker.unlock();
             }
         );
     }
@@ -141,7 +152,7 @@ namespace KWShared
             {
                 //finalize websocket
                 clientsSessionsStates[client->socket]->webSocketState = WS_FINISHED;
-                WebSocketProcess(client, (char*)"", 0);
+                WebSocketProcess(client);
             }
 
             clientsSessionsStates[client->socket]->receivedData.clear();
@@ -188,7 +199,7 @@ namespace KWShared
 		#endif
 	}*/
 
-    void KWTinyWebServer::dataReceivedFrom(ClientInfo *client, char *data, size_t dataSize)
+    void KWTinyWebServer::dataReceivedFrom(ClientInfo *client)
     {
 
         if (clientsSessionsStates.count(client->socket) <= 0)
@@ -220,24 +231,25 @@ namespace KWShared
         char dtStr[256];
         time_t t;
         struct tm *timep;
+        char tmpData;
 
         if (sessionState->webSocketOpen)
         {
-            WebSocketProcess(client, data, dataSize);
+            WebSocketProcess(client);
 
             return;
         }
 
         size_t cont = 0;
 
-        sessionState->readDataMutex.try_lock_for(chrono::milliseconds(2000));
-
         while (
             (sessionState->state != SEND_REQUEST_TO_APP) 
+            && (sessionState->state != AWAIT_CONTENT) 
+            && (sessionState->state != ERROR_400_BADREQUEST) 
             && (sessionState->state != ERROR_500_INTERNALSERVERERROR) 
             && (sessionState->state != ERROR_501_NOT_IMPLEMENTED) 
             && (sessionState->state != FINISHED) 
-            && cont < dataSize
+            && (sessionState->incomingDataBuffer.size() > 0)
         )
         {
             sessionState->prevState = sessionState->state;
@@ -245,7 +257,12 @@ namespace KWShared
                 switch (sessionState->state)
                 {
                 case READING_VERB:
-                    if (data[cont] == ' ')
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    if (tmpData == ' ')
                     {
                         bool valid = true;
                         for (unsigned int cont2 = 0; cont2 < sessionState->bufferStr.size(); cont2++)
@@ -288,11 +305,16 @@ namespace KWShared
                         }
                     }
                     else
-                        sessionState->bufferStr += data[cont];
+                        sessionState->bufferStr += tmpData;
                 
                     break;
                 case AWAIT_REMAIN_OF_HTTP_FIRST_LINE:
-                    sessionState->bufferStr += data[cont];
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    sessionState->bufferStr += tmpData;
 
 
 
@@ -338,7 +360,13 @@ namespace KWShared
 
                     break;
                 case READING_HEADER:
-                    sessionState->bufferStr += data[cont];
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    sessionState->bufferStr += tmpData;
+                    cout << "bufferstr: " << sessionState->bufferStr << endl;
                     if (sessionState->bufferStr.find("\r\n") != string::npos)
                     {
                         if (sessionState->bufferStr != "\r\n")
@@ -390,7 +418,12 @@ namespace KWShared
 
                     break;
                 case AWAIT_CONTENT:
-                    sessionState->receivedData.contentBody[sessionState->currentContentLength++] = data[cont];
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    sessionState->receivedData.contentBody[sessionState->currentContentLength++] = tmpData;
 
                     if (sessionState->currentContentLength == sessionState->receivedData.contentLength)
                     {
@@ -422,7 +455,6 @@ namespace KWShared
             || sessionState->state == AWAIT_CONTENT
         )
         {
-            sessionState->readDataMutex.unlock();
             return;
         }
 
@@ -647,7 +679,6 @@ namespace KWShared
 
             }
         }
-        sessionState->readDataMutex.unlock();
     }
 
     bool KWTinyWebServer::isToKeepAlive(KWClientSessionState* sessionState)
@@ -655,7 +686,7 @@ namespace KWShared
         return sessionState->connection.find("KEEP-ALIVE") != string::npos;
     }
 
-    void KWTinyWebServer::WebSocketProcess(ClientInfo* client, char* data, size_t dataSize)
+    void KWTinyWebServer::WebSocketProcess(ClientInfo* client)
     {
         KWClientSessionState *sessionState = this->clientsSessionsStates[client->socket];
 
@@ -678,9 +709,12 @@ namespace KWShared
         
         char ws_curr;
 
-        for (size_t cont = 0; cont < dataSize && sessionState->webSocketState != WS_FINISHED; cont++)
+        for (size_t cont = 0; sessionState->incomingDataBuffer.size() > 0 && sessionState->webSocketState != WS_FINISHED; cont++)
         {
-            ws_curr = data[cont];
+            sessionState->incomingDataLocker.lock();
+            ws_curr = sessionState->incomingDataBuffer.front();
+            sessionState->incomingDataBuffer.pop();
+            sessionState->incomingDataLocker.unlock();
             //READ DATA FROM SOCKET
 
             switch (sessionState->webSocketState)

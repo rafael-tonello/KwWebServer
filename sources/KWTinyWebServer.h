@@ -29,6 +29,7 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <errno.h>
+#include <queue>
 
 //#ifdef __WIN32__
 //# include <winsock2.h>
@@ -112,6 +113,10 @@ namespace KWShared{
 
 
         string bufferStr = "";
+        mutex incomingDataLocker;
+        atomic<bool> processingIncomingData;
+        queue<char> incomingDataBuffer = {};
+
         vector<string> tempHeaderParts;
         
         bool ignoreKeepAlive = false;
@@ -128,7 +133,6 @@ namespace KWShared{
         unsigned long long ws_packSize = 0;
         bool ws_masked;
         char ws_opcode; //4 bits
-        timed_mutex readDataMutex;
 
         KWClientSessionState(){
 
@@ -205,7 +209,7 @@ namespace KWShared{
             string _serverInfo;
             
             const string _serverName = "KWTinyWebServer embeded server";
-            const string _serverVersion = "2.2.1";
+            const string _serverVersion = "2.2.2";
             //                       | | |
             //                       | | +------> Bugs fixes and compilation
             //                       | +--------> New features
@@ -219,8 +223,8 @@ namespace KWShared{
 
             void initializeClient(ClientInfo* client);
             void finalizeClient(ClientInfo* client);
-            void dataReceivedFrom(ClientInfo* client, char* data, size_t dataSize);
-            void WebSocketProcess(ClientInfo* client, char* data, size_t dataSize);
+            void dataReceivedFrom(ClientInfo* client);
+            void WebSocketProcess(ClientInfo* client);
         
             static bool isToKeepAlive(KWClientSessionState* sessionState);
     };
