@@ -128,6 +128,7 @@ namespace KWShared{
         unsigned long long ws_packSize = 0;
         bool ws_masked;
         char ws_opcode; //4 bits
+        timed_mutex readDataMutex;
 
         KWClientSessionState(){
 

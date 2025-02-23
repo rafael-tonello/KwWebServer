@@ -95,10 +95,18 @@ namespace KWShared
             {
                 auto tmpData = new char[dataSize];
                 memcpy(tmpData, data, dataSize);
-                //this->__tasks->enqueue([=](){
+                this->__tasks->enqueue([=](){
+                    if (this->clientsSessionsStates.count(client->socket) <= 0)
+                    {
+                        cerr << "received data from a not initialized client" << endl;
+                        client->disconnect();
+                        return;
+                        //throw std::runtime_error("data received for a no intialized client");
+                    }
+
                     this->dataReceivedFrom(client, tmpData, dataSize);
                     delete[] tmpData;
-                //});
+                });
             }
         );
     }
@@ -192,7 +200,21 @@ namespace KWShared
 
         const string validVerbCharacters="ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
 
+        if (clientsSessionsStates.count(client->socket) <= 0)
+        {
+            cerr << "received data from a not initialized client (client not found)" << endl;
+            return;
+            //throw std::runtime_error("data received for a no intialized client");
+        }
+
         KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
+
+        if (sessionState == nullptr)
+        {
+            cerr << "received data from a not initialized client (client found but sessionState is null)" << endl;
+            return;
+            //throw std::runtime_error("data received for a no intialized client");
+        }
 
         string keyUpper = "";
         char dtStr[256];
@@ -206,8 +228,9 @@ namespace KWShared
             return;
         }
 
-
         size_t cont = 0;
+
+        sessionState->readDataMutex.try_lock_for(chrono::milliseconds(2000));
 
         while (
             (sessionState->state != SEND_REQUEST_TO_APP) 
@@ -270,7 +293,6 @@ namespace KWShared
                     break;
                 case AWAIT_REMAIN_OF_HTTP_FIRST_LINE:
                     sessionState->bufferStr += data[cont];
-                    cout << sessionState->bufferStr << endl;
 
 
 
@@ -326,7 +348,7 @@ namespace KWShared
                             sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, ":");
 
                             //remove possible  ' ' from start of value
-                            if (sessionState->tempHeaderParts[1].size() > 0 && sessionState->tempHeaderParts[1][0] == ' ')
+                            if (sessionState->tempHeaderParts.size() > 1 && sessionState->tempHeaderParts[1].size() > 0 && sessionState->tempHeaderParts[1][0] == ' ')
                                 sessionState->tempHeaderParts[1].erase(0, 1);
 
                             if (sessionState->tempHeaderParts.size() > 1)
@@ -400,6 +422,7 @@ namespace KWShared
             || sessionState->state == AWAIT_CONTENT
         )
         {
+            sessionState->readDataMutex.unlock();
             return;
         }
 
@@ -619,11 +642,12 @@ namespace KWShared
                 else
                 {
                     client->disconnect();
-                    //Cliente is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
+                    //Client is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
                 }
 
             }
         }
+        sessionState->readDataMutex.unlock();
     }
 
     bool KWTinyWebServer::isToKeepAlive(KWClientSessionState* sessionState)
