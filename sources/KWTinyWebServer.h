@@ -209,7 +209,7 @@ namespace KWShared{
             string _serverInfo;
             
             const string _serverName = "KWTinyWebServer embeded server";
-            const string _serverVersion = "2.2.2";
+            const string _serverVersion = "2.2.3";
             //                       | | |
             //                       | | +------> Bugs fixes and compilation
             //                       | +--------> New features

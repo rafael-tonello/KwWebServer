@@ -243,8 +243,7 @@ namespace KWShared
         size_t cont = 0;
 
         while (
-            (sessionState->state != SEND_REQUEST_TO_APP) 
-            && (sessionState->state != AWAIT_CONTENT) 
+            (sessionState->state != SEND_REQUEST_TO_APP)
             && (sessionState->state != ERROR_400_BADREQUEST) 
             && (sessionState->state != ERROR_500_INTERNALSERVERERROR) 
             && (sessionState->state != ERROR_501_NOT_IMPLEMENTED) 
