@@ -15,7 +15,6 @@ namespace KWShared{
         {
           result.push_back(str.substr(0, pos));
           str = str.substr(pos+1);
-          std::cout << "str = " << str << std::endl;
           pos = str.find(sep);
         }
         if (str != "")
