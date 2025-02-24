@@ -365,7 +365,6 @@ namespace KWShared
                     sessionState->incomingDataLocker.unlock();
 
                     sessionState->bufferStr += tmpData;
-                    cout << "bufferstr: " << sessionState->bufferStr << endl;
                     if (sessionState->bufferStr.find("\r\n") != string::npos)
                     {
                         if (sessionState->bufferStr != "\r\n")
