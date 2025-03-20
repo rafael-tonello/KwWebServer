@@ -134,9 +134,6 @@ namespace KWShared{
         bool ws_masked;
         char ws_opcode; //4 bits
 
-        //session start date (is used to check is session is too long without receive data)
-        int64_t sessionStartTimeSeconds = 0;
-
         KWClientSessionState(){
 
         }
@@ -159,8 +156,7 @@ namespace KWShared{
                 ThreadPool* tasker = NULL,
                 bool enableHttps = false,
                 string sslKey = "",
-                string sslPublicCert = "",
-                int sessionsTimeoutSeconds = 5
+                string sslPublicCert = ""
             );
 
             virtual ~KWTinyWebServer();
@@ -178,10 +174,7 @@ namespace KWShared{
             ThreadPool * __tasks;
 
             void debug(string debug, bool forceFlush = false);
-            static long int getCurrDayMilisec();
-
-            //return time since epoch in seconds
-            static int64_t getCurrentTimeInSeconds();
+            long int getCurrDayMilisec();
 
 
             string getDataFolder(){ return this->__dataFolder; }
@@ -228,17 +221,12 @@ namespace KWShared{
             SysLink sysLink;
             TCPServer* server;
 
-            int sessionsTimeoutSeconds = 5;
-
             void initializeClient(ClientInfo* client);
             void finalizeClient(ClientInfo* client);
             void dataReceivedFrom(ClientInfo* client);
             void WebSocketProcess(ClientInfo* client);
         
             static bool isToKeepAlive(KWClientSessionState* sessionState);
-
- 
-            bool timeouted(KWClientSessionState* sessionState);
     };
 }
 #endif

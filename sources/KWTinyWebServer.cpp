@@ -23,11 +23,9 @@ namespace KWShared
         ThreadPool *tasker, 
         bool enableHttps,
         string sslKey,
-        string sslPublicCert,
-        int sessionsTimeoutSeconds)
+        string sslPublicCert)
     {
         this->setServerInfo(this->_serverName+ ", version " + this->_serverVersion);
-        this->sessionsTimeoutSeconds = sessionsTimeoutSeconds;
 
         if (tasker != NULL)
         {
@@ -134,12 +132,10 @@ namespace KWShared
     {
         if (clientsSessionsStates.count(client->socket) > 0)
             delete clientsSessionsStates[client->socket];
-
         auto tmp = new KWClientSessionState();
         tmp->client = client;
         tmp->receivedData.client = client;
         tmp->dataToSend.client = client;
-        tmp->sessionStartTimeSeconds = getCurrentTimeInSeconds();
 
         clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
@@ -255,14 +251,6 @@ namespace KWShared
             && (sessionState->incomingDataBuffer.size() > 0)
         )
         {
-            if (timeouted(sessionState))
-            {
-                this->debug("Client timeouted");
-                sessionState->internalServerErrorMessage = "Client timeouted";
-                sessionState->state = ERROR_500_INTERNALSERVERERROR;
-                break;
-            }
-
             sessionState->prevState = sessionState->state;
             {
                 switch (sessionState->state)
@@ -470,14 +458,6 @@ namespace KWShared
 
         while (sessionState->state != FINISHED)
         {
-            if (timeouted(sessionState))
-            {
-                this->debug("Client timeouted");
-                sessionState->internalServerErrorMessage = "Client timeouted";
-                sessionState->state = ERROR_500_INTERNALSERVERERROR;
-                break;
-            }
-
             sessionState->prevState = sessionState->state;
 
             switch (sessionState->state)
@@ -1124,12 +1104,6 @@ namespace KWShared
         return temp.tv_sec * 1000 + temp.tv_usec / 1000;
     }
 
-    //return time since epoch in seconds
-    int64_t KWTinyWebServer::getCurrentTimeInSeconds(){
-        //uses chrono to get the current time in seconds
-        return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    }
-
     string KWTinyWebServer::get_app_path()
     {
         char arg1[200];
@@ -1145,15 +1119,4 @@ namespace KWShared
         this->__workers.push_back(worker);
         worker->start(this);
     }
-
-    bool KWTinyWebServer::timeouted(KWClientSessionState *sessionState)
-    {
-        auto currentTimeMilisseconds = getCurrentTimeInSeconds();
-        if (currentTimeMilisseconds - sessionState->sessionStartTimeSeconds > sessionsTimeoutSeconds)
-        {
-            return true;
-        }
-
-    }
-
 }
