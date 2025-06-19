@@ -11,7 +11,7 @@ namespace KWShared{
         public:
 
             void start(void* webserver){};
-            void load(HttpData* httpData){
+            void load(shared_ptr<HttpData> httpData){
                 /*this worker scrolls throught the headers of the httpData object and looks for
                 cookies information and uses this information to populate the 'cookies' property of the'
                 httpData*/
@@ -51,7 +51,7 @@ namespace KWShared{
                 }
             }
 
-            void unload(HttpData* httpData){
+            void unload(shared_ptr<HttpData> httpData){
                 for (auto & curr: httpData->cookies)
                 {
 
@@ -74,7 +74,7 @@ namespace KWShared{
         protected:
 
         private:
-            StringUtils strUtils;
+            KWShared::StringUtils strUtils;
 
     };
 }

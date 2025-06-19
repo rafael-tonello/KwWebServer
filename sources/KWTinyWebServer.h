@@ -60,7 +60,7 @@ using namespace TCPServerLib;
 namespace KWShared{
     using namespace std;
 
-    //typedef void (*OnClientDataSend)(HttpData* in, HttpData* out);
+    //typedef void (*OnClientDataSend)(shared_ptr<HttpData> in, shared_ptr<HttpData> out);
 
     enum States {
         READING_VERB,
@@ -92,17 +92,17 @@ namespace KWShared{
 
     class WebServerObserver{
         public:
-            virtual void OnHttpRequest(HttpData* in, HttpData* out) = 0;
-            virtual void OnWebSocketConnect(HttpData *originalRequest, string resource) = 0;
-            virtual void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize) = 0;
-            virtual void OnWebSocketDisconnect(HttpData *originalRequest, string resource) = 0;
+            virtual void OnHttpRequest(shared_ptr<HttpData> in, shared_ptr<HttpData> out) = 0;
+            virtual void OnWebSocketConnect(shared_ptr<HttpData>originalRequest, string resource) = 0;
+            virtual void OnWebSocketData(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize) = 0;
+            virtual void OnWebSocketDisconnect(shared_ptr<HttpData>originalRequest, string resource) = 0;
     };
 
     class KWClientSessionState{
     public:
         string internalServerErrorMessage = "";
-        ClientInfo* client = nullptr;
-        HttpData receivedData, dataToSend;
+        shared_ptr<ClientInfo>  client = nullptr;
+        shared_ptr<HttpData> receivedData, dataToSend;
         States state = READING_VERB;
         States prevState = READING_VERB;
         string connection = "";
@@ -135,7 +135,8 @@ namespace KWShared{
         char ws_opcode; //4 bits
 
         KWClientSessionState(){
-
+            receivedData = make_shared<HttpData>();
+            dataToSend = make_shared<HttpData>();
         }
 
         ~KWClientSessionState(){
@@ -161,14 +162,14 @@ namespace KWShared{
 
             virtual ~KWTinyWebServer();
 
-            void sendWebSocketData(ClientInfo *client, char* data, int size, bool isText);
-            void sendWebSocketData(HttpData *originalRequest, char* data, int size, bool isText);
+            void sendWebSocketData(shared_ptr<ClientInfo> client, char* data, int size, bool isText);
+            void sendWebSocketData(shared_ptr<HttpData>originalRequest, char* data, int size, bool isText);
             void broadcastWebSocker(char* data, int size, bool isText, string resource = "*");
-            void disconnecteWebSocket(ClientInfo* client);
-            void disconnecteWebSocket(HttpData* originalRequest);
+            void disconnecteWebSocket(shared_ptr<ClientInfo> client);
+            void disconnecteWebSocket(shared_ptr<HttpData> originalRequest);
 
 
-            void __TryAutoLoadFiles(HttpData* in, HttpData* out);
+            void __TryAutoLoadFiles(shared_ptr<HttpData> in, shared_ptr<HttpData> out);
             WebServerObserver *__observer;
             string __dataFolder;
             ThreadPool * __tasks;
@@ -221,12 +222,13 @@ namespace KWShared{
             SysLink sysLink;
             TCPServer* server;
 
-            void initializeClient(ClientInfo* client);
-            void finalizeClient(ClientInfo* client);
-            void dataReceivedFrom(ClientInfo* client);
-            void WebSocketProcess(ClientInfo* client);
+            void initializeClient(shared_ptr<ClientInfo> client);
+            void finalizeClient(shared_ptr<ClientInfo> client);
+            void dataReceivedFrom(shared_ptr<ClientInfo> client);
+            void WebSocketProcess(shared_ptr<ClientInfo> client);
         
             static bool isToKeepAlive(KWClientSessionState* sessionState);
+            void endHttpRequest(shared_ptr<ClientInfo> client, KWClientSessionState* sessionState);
     };
 }
 #endif

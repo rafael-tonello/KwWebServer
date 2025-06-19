@@ -78,10 +78,10 @@ namespace KWShared {
 
         class KWSRequestRoute: public KWSRoute{
         protected:
-            KWSObservable<function<void(HttpData* in, HttpData* out, map<string, string> vars)>> observers;
+            KWSObservable<function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out, map<string, string> vars)>> observers;
         public:
             string method;
-            void onHttpRequest(function<void(HttpData* in, HttpData* out, map<string, string> vars)> f){ observers.add(f); };
+            void onHttpRequest(function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out, map<string, string> vars)> f){ observers.add(f); };
         };
 
         class KWSRequestRouteExtended: public KWSRequestRoute{
@@ -90,25 +90,25 @@ namespace KWShared {
         public:
             ~KWSRequestRouteExtended(){ if (onDestroy != NULL) onDestroy(this); }
             void setOnDestroy(function<void (KWSRequestRouteExtended* route)> f){ onDestroy = f; }
-            KWSObservable<function<void(HttpData* in, HttpData* out, map<string, string> vars)>>& getObservers(){ return observers; };
+            KWSObservable<function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out, map<string, string> vars)>>& getObservers(){ return observers; };
         };
 
         class KWSWebsocketRoute: public KWSRoute{
         protected:
             KWWebServerRouter* router;
 
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars)>> onConnectObservers;
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars)>> onDisconnectObservers;
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars, string data)>> onDataObservers;
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)>> onConnectObservers;
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)>> onDisconnectObservers;
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars, string data)>> onDataObservers;
         public:
             KWSWebsocketRoute(KWWebServerRouter* router):router(router){}
 
-            void onConnect(function<void(HttpData *originalRequest, map<string, string> vars)> f){ onConnectObservers.add(f);};
-            void onDisconnect(function<void(HttpData *originalRequest, map<string, string> vars)> f){ onDisconnectObservers.add(f);};
-            void onData(function<void(HttpData *originalRequest, map<string, string> vars, string data)> f){ onDataObservers.add(f);};
+            void onConnect(function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)> f){ onConnectObservers.add(f);};
+            void onDisconnect(function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)> f){ onDisconnectObservers.add(f);};
+            void onData(function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars, string data)> f){ onDataObservers.add(f);};
 
-            void send(HttpData *originalRequest, string data);
-            void send(ClientInfo *client, string data);
+            void send(shared_ptr<HttpData>originalRequest, string data);
+            void send(shared_ptr<ClientInfo>client, string data);
             void sendToAll(string data);
 
             size_t observersCount();
@@ -121,9 +121,9 @@ namespace KWShared {
             KWSWebsocketRouteExtended(KWWebServerRouter* router): KWSWebsocketRoute(router) {};
             void setOnDestroy(function<void (KWSWebsocketRouteExtended* route)> f){ onDestroy = f; }
             ~KWSWebsocketRouteExtended(){ if (onDestroy != NULL) onDestroy(this); }
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars)>> &getOnConnectObservers(){ return onConnectObservers; };
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars)>> &getOnDisconnectObservers(){ return onDisconnectObservers; };
-            KWSObservable<function<void(HttpData *originalRequest, map<string, string> vars, string data)>> &getOnDataObservers(){ return onDataObservers; };
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)>> &getOnConnectObservers(){ return onConnectObservers; };
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars)>> &getOnDisconnectObservers(){ return onDisconnectObservers; };
+            KWSObservable<function<void(shared_ptr<HttpData>originalRequest, map<string, string> vars, string data)>> &getOnDataObservers(){ return onDataObservers; };
         };
     };
 
@@ -133,7 +133,7 @@ namespace KWShared {
     private:
         map<string, vector<KWSRoute*>> requestRoutesObservers;
         map<string, vector<KWSRoute*>> websocketRoutesObservers;
-        vector<ClientInfo*> connectedWebsockets;
+        vector<shared_ptr<ClientInfo>> connectedWebsockets;
 
         shared_ptr<KWTinyWebServer> server;
         mutex listLockers;
@@ -144,10 +144,10 @@ namespace KWShared {
         void requestRouteDestroyed(KWSRequestRouteExtended* route);
         string fixRouteId(string route);
         void runLocked(function<void()> f);
-        void OnHttpRequest(HttpData* in, HttpData* out);
-        void OnWebSocketConnect(HttpData *originalRequest, string resource);
-        void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize);
-        void OnWebSocketDisconnect(HttpData *originalRequest, string resource);
+        void OnHttpRequest(shared_ptr<HttpData> in, shared_ptr<HttpData> out);
+        void OnWebSocketConnect(shared_ptr<HttpData>originalRequest, string resource);
+        void OnWebSocketData(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize);
+        void OnWebSocketDisconnect(shared_ptr<HttpData>originalRequest, string resource);
 
         bool identifyObservers(string method, string resource, map<string, vector<KWSRoute*>> routes, function<void(KWSRoute* item, map<string, string> vars)> action);
         bool routeIsCompatible(string routeTemplate, string receivedResource, map<string, string> &vars);
@@ -168,7 +168,7 @@ namespace KWShared {
         shared_ptr<KWSRequestRoute> routeElse();
         shared_ptr<KWSWebsocketRoute> routeWebsocketElse();
         shared_ptr<KWTinyWebServer> getServer();
-        vector<ClientInfo*> getConnectedWebsockets(){return connectedWebsockets;}
+        vector<shared_ptr<ClientInfo>> getConnectedWebsockets(){return connectedWebsockets;}
     };
 } 
  

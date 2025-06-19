@@ -33,7 +33,7 @@ namespace KWShared
             this->__tasks = tasker;
         }
         else
-            this->__tasks = new ThreadPool(0, 0, "KWBSrvrTsks");
+            this->__tasks = new ThreadPool(5, 0, "KWBSrvrTsks");
 
         if (dataFolder == "_AUTO_DEFINE_" || dataFolder == "")
         {
@@ -81,7 +81,7 @@ namespace KWShared
         }
 
         this->server->addConEventListener(
-            [this](ClientInfo *client, CONN_EVENT event)
+            [this](shared_ptr<ClientInfo> client, CONN_EVENT event)
             {
                 if (event == CONN_EVENT::CONNECTED)
                     this->initializeClient(client);
@@ -91,11 +91,11 @@ namespace KWShared
         );
 
         this->server->addReceiveListener(
-            [=](ClientInfo *client, char *data, size_t dataSize)
+            [=](shared_ptr<ClientInfo> client, char *data, size_t dataSize)
             {
                 if (this->clientsSessionsStates.count(client->socket) <= 0)
                 {
-                    client->disconnect();
+                    //client->disconnect();
                     return;
                     //throw std::runtime_error("data received for a no intialized client");
                 }
@@ -113,6 +113,8 @@ namespace KWShared
                     clientState->processingIncomingData = true;
                     
                     this->__tasks->enqueue([=](){
+                        if (!server->isConnected(client)) { return; }
+
                         this->dataReceivedFrom(client);
                         clientState->processingIncomingData = false;
                     });
@@ -128,22 +130,22 @@ namespace KWShared
         delete this->server;
     }
 
-    void KWTinyWebServer::initializeClient(ClientInfo *client)
+    void KWTinyWebServer::initializeClient(shared_ptr<ClientInfo> client)
     {
         if (clientsSessionsStates.count(client->socket) > 0)
             delete clientsSessionsStates[client->socket];
+
         auto tmp = new KWClientSessionState();
         tmp->client = client;
-        tmp->receivedData.client = client;
-        tmp->dataToSend.client = client;
+        tmp->receivedData->client = client;
+        tmp->dataToSend->client = client;
 
         clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
         clientsSessionsStatesMutex.unlock();
     }
 
-    void KWTinyWebServer::finalizeClient(ClientInfo *client)
-
+    void KWTinyWebServer::finalizeClient(shared_ptr<ClientInfo> client)
     {
         clientsSessionsStatesMutex.lock();
         if (clientsSessionsStates.count(client->socket) > 0)
@@ -155,14 +157,16 @@ namespace KWShared
                 WebSocketProcess(client);
             }
 
-            clientsSessionsStates[client->socket]->receivedData.clear();
-            clientsSessionsStates[client->socket]->dataToSend.clear();
+            clientsSessionsStates[client->socket]->receivedData->clear();
+            clientsSessionsStates[client->socket]->dataToSend->clear();
 
-            //do not delete the clie here. It will be deleteted by the TCPServer lib
+            clientsSessionsStates.erase(client->socket);
+
+            
+            //todo: discover why this is crashing the server
             //delete clientsSessionsStates[client->socket];
 
 
-            clientsSessionsStates.erase(client->socket);
         }
         clientsSessionsStatesMutex.unlock();
     }
@@ -199,16 +203,8 @@ namespace KWShared
 		#endif
 	}*/
 
-    void KWTinyWebServer::dataReceivedFrom(ClientInfo *client)
+    void KWTinyWebServer::dataReceivedFrom(shared_ptr<ClientInfo> client)
     {
-
-        if (clientsSessionsStates.count(client->socket) <= 0)
-        {
-            cerr << "received data from a not initialized client" << endl;
-            return;
-            //throw std::runtime_error("data received for a no intialized client");
-        }
-
         const string validVerbCharacters="ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
 
         if (clientsSessionsStates.count(client->socket) <= 0)
@@ -278,7 +274,7 @@ namespace KWShared
                         }
 
                         if (valid){
-                            sessionState->receivedData.method = sessionState->bufferStr;
+                            sessionState->receivedData->method = sessionState->bufferStr;
                             //a header was received
                             sessionState->state = AWAIT_REMAIN_OF_HTTP_FIRST_LINE;
                             sessionState->bufferStr.clear();
@@ -328,9 +324,9 @@ namespace KWShared
                         {
 
                             
-                            sessionState->receivedData.resource = sessionState->tempHeaderParts.at(0);
+                            sessionState->receivedData->resource = sessionState->tempHeaderParts.at(0);
                             auto httpVersion = sessionState->tempHeaderParts.at(1);
-                            sessionState->receivedData.contentLength = 0;
+                            sessionState->receivedData->contentLength = 0;
 				
                             if (StringUtils::toUpper(httpVersion) != string("HTTP/1.1\r\n"))
                             {
@@ -382,14 +378,14 @@ namespace KWShared
                                 keyUpper = StringUtils::toUpper(sessionState->tempHeaderParts.at(0));
                                 sessionState->tempHeaderParts[0] = keyUpper;
 
-                                sessionState->receivedData.headers.push_back(sessionState->tempHeaderParts);
+                                sessionState->receivedData->headers.push_back(sessionState->tempHeaderParts);
 
                                 if (keyUpper == "CONTENT-LENGTH")
-                                    sessionState->receivedData.contentLength = atoi(sessionState->tempHeaderParts.at(1).c_str());
+                                    sessionState->receivedData->contentLength = atoi(sessionState->tempHeaderParts.at(1).c_str());
                                 else if (keyUpper == "CONTENT-TYPE")
-                                    sessionState->receivedData.contentType = sessionState->tempHeaderParts.at(1);
+                                    sessionState->receivedData->contentType = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "ACCEPT")
-                                    sessionState->receivedData.accept = sessionState->tempHeaderParts.at(1);
+                                    sessionState->receivedData->accept = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "CONNECTION")
                                     sessionState->connection = StringUtils::toUpper(sessionState->tempHeaderParts.at(1));
                                 else if (keyUpper == "UPGRADE")
@@ -400,13 +396,14 @@ namespace KWShared
                         }
                         else
                         {
-                            if (sessionState->receivedData.contentLength == 0)
+                            if (sessionState->receivedData->contentLength == 0)
                                 sessionState->state = SEND_REQUEST_TO_APP;
                             else
                             {
                                 sessionState->state = AWAIT_CONTENT;
-                                sessionState->receivedData.contentBody = new char[sessionState->receivedData.contentLength + 1];
-                                sessionState->receivedData.contentBody[sessionState->receivedData.contentLength] = 0;
+                                
+                                sessionState->receivedData->contentBody = shared_ptr<char[]>(new char[sessionState->receivedData->contentLength + 1]);
+                                sessionState->receivedData->contentBody[sessionState->receivedData->contentLength] = 0;
                                 sessionState->currentContentLength = 0;
                             }
                         }
@@ -421,9 +418,9 @@ namespace KWShared
                     sessionState->incomingDataBuffer.pop();
                     sessionState->incomingDataLocker.unlock();
 
-                    sessionState->receivedData.contentBody[sessionState->currentContentLength++] = tmpData;
+                    sessionState->receivedData->contentBody[sessionState->currentContentLength++] = tmpData;
 
-                    if (sessionState->currentContentLength == sessionState->receivedData.contentLength)
+                    if (sessionState->currentContentLength == sessionState->receivedData->contentLength)
                     {
                         //rawBuffer.clear();
                         sessionState->state = SEND_REQUEST_TO_APP;
@@ -441,8 +438,8 @@ namespace KWShared
 
         if (sessionState->connection.find("UPGRADE") != string::npos && sessionState->upgrade.find("WEBSOCKET") != string::npos)
         {
-            sessionState->dataToSend.httpStatus = 101;
-            sessionState->receivedData.httpStatus = 101;
+            sessionState->dataToSend->httpStatus = 101;
+            sessionState->receivedData->httpStatus = 101;
         }
 
         //check if first part (read of headers and content) of the request is finished
@@ -468,38 +465,38 @@ namespace KWShared
                 t = time(0);
                 timep = gmtime(&t);
                 strftime(dtStr, 256, "%a, %d %b %Y %T GMT", timep);
-                sessionState->dataToSend.headers.push_back({"date", string(dtStr)});
+                sessionState->dataToSend->headers.push_back({"date", string(dtStr)});
                 //try autosendFiles
-                if (sessionState->dataToSend.httpStatus != 101)
-                    this->__TryAutoLoadFiles(&sessionState->receivedData, &sessionState->dataToSend);
+                if (sessionState->dataToSend->httpStatus != 101)
+                    this->__TryAutoLoadFiles(sessionState->receivedData, sessionState->dataToSend);
                 //notify workers
                 for (auto &curr : this->__workers)
-                    curr->load(&sessionState->receivedData);
+                    curr->load(sessionState->receivedData);
 
                 //copy cookies and session data from receivedData to dataToSend
-                for (auto &curr : sessionState->receivedData.cookies)
+                for (auto &curr : sessionState->receivedData->cookies)
                 {
-                    if (sessionState->dataToSend.cookies.find(curr.first) != sessionState->dataToSend.cookies.end())
-                        sessionState->dataToSend.cookies[curr.first]->copyFrom(curr.second);
+                    if (sessionState->dataToSend->cookies.find(curr.first) != sessionState->dataToSend->cookies.end())
+                        sessionState->dataToSend->cookies[curr.first]->copyFrom(curr.second);
                     else
-                        sessionState->dataToSend.cookies[curr.first] = new HttpCookie(curr.second);
+                        sessionState->dataToSend->cookies[curr.first] = new HttpCookie(curr.second);
                 }
 
-                this->__observer->OnHttpRequest(&sessionState->receivedData, &sessionState->dataToSend);
+                this->__observer->OnHttpRequest(sessionState->receivedData, sessionState->dataToSend);
 
                 //clear used data
 
-                if (sessionState->dataToSend.httpStatus == 0 && sessionState->dataToSend.contentType == "")
+                if (sessionState->dataToSend->httpStatus == 0 && sessionState->dataToSend->contentType == "")
                 {
-                    sessionState->dataToSend.httpStatus = 404;
-                    sessionState->dataToSend.httpMessage = "Not found";
-                    sessionState->dataToSend.contentLength = 0;
+                    sessionState->dataToSend->httpStatus = 404;
+                    sessionState->dataToSend->httpMessage = "Not found";
+                    sessionState->dataToSend->contentLength = 0;
                     sessionState->ignoreKeepAlive = true;
                 }
 
                 for (auto &curr : this->__workers)
                 {
-                    curr->unload(&sessionState->dataToSend);
+                    curr->unload(sessionState->dataToSend);
                 }
 
                 sessionState->state = CHECK_PROTOCOL_CHANGE;
@@ -508,16 +505,16 @@ namespace KWShared
             case CHECK_PROTOCOL_CHANGE:
                 sessionState->state = SEND_RESPONSE;
                 //check if http request is an protocol change request
-                if (sessionState->receivedData.httpStatus == 101)
+                if (sessionState->receivedData->httpStatus == 101)
                 {
-                    sessionState->dataToSend.contentBody = new char[0];
-                    sessionState->dataToSend.contentLength = 0;
+                    sessionState->dataToSend->contentBody = shared_ptr<char[]>(new char[0]);
+                    sessionState->dataToSend->contentLength = 0;
 
                     //WEBSOCKET CONNECTION (START ANOTHER THREAD TO WORK WITH CONNECTIN, SEND ACCEPTANCE TO CLIENT AND EXTI FROM HTTP PARSING PROCESS)
                     string secWebSocketKey = "";
 
                     //lock for SEC-WEBSOCKET-KEY key
-                    for (auto &p : sessionState->receivedData.headers)
+                    for (auto &p : sessionState->receivedData->headers)
                     {
                         if (p[0] == "SEC-WEBSOCKET-KEY")
                             secWebSocketKey = p[1];
@@ -532,20 +529,19 @@ namespace KWShared
                         string secWebSocketBase64 = StringUtils::base64_encode(sha1result, SHA_DIGEST_LENGTH);
 
                         //prepare the http response to client
-                        sessionState->dataToSend.httpStatus = 101;
-                        sessionState->dataToSend.httpMessage = "Switching Protocols";
-                        sessionState->dataToSend.setContentString("");
-                        sessionState->dataToSend.headers.push_back({"Upgrade", "websocket"});
-                        sessionState->dataToSend.headers.push_back({"Connection", "Upgrade"});
-                        sessionState->dataToSend.headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
+                        sessionState->dataToSend->httpStatus = 101;
+                        sessionState->dataToSend->httpMessage = "Switching Protocols";
+                        sessionState->dataToSend->setContentString("");
+                        sessionState->dataToSend->headers.push_back({"Upgrade", "websocket"});
+                        sessionState->dataToSend->headers.push_back({"Connection", "Upgrade"});
+                        sessionState->dataToSend->headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
 
                         secWebSocketBase64.clear();
                         concat.clear();
 
                         //create a new thread to work with the web socket connection
                         pthread_t *thWebSocketProcess = new pthread_t;
-                        void **tmp = new void *[4];
-                        HttpData *cl = new HttpData(&sessionState->receivedData);
+                        auto cl = shared_ptr<HttpData>(new HttpData(sessionState->receivedData.get()));
                         sessionState->webSocketOpen = true;
 
                         sessionState->state = SEND_RESPONSE;
@@ -555,56 +551,57 @@ namespace KWShared
                 }
                 else
                 {
-                    sessionState->dataToSend.headers.push_back({"Connection", "Close"});
+                    sessionState->dataToSend->headers.push_back({"Connection", "Close"});
                 }
                 break;
             case SEND_RESPONSE:
 
                 //send first line and server name
-                if (sessionState->dataToSend.httpStatus == 0)
+                if (sessionState->dataToSend->httpStatus == 0)
                 {
-                    if (sessionState->dataToSend.contentLength == 0)
+                    if (sessionState->dataToSend->contentLength == 0)
                     {
-                        sessionState->dataToSend.httpStatus = 204;
-                        sessionState->dataToSend.httpMessage = "No content";
+                        sessionState->dataToSend->httpStatus = 204;
+                        sessionState->dataToSend->httpMessage = "No content";
                     }
                     else
                     {
-                        sessionState->dataToSend.httpStatus = 200;
-                        sessionState->dataToSend.httpMessage = "OK";
+                        sessionState->dataToSend->httpStatus = 200;
+                        sessionState->dataToSend->httpMessage = "OK";
                     }
 
                 }
 
+                if (!server->isConnected(client)) { sessionState->state = FINISHED; endHttpRequest(client, sessionState); return; }
                 client->sendString(
                     "HTTP/1.1 " +
-                    std::to_string(sessionState->dataToSend.httpStatus) +
+                    std::to_string(sessionState->dataToSend->httpStatus) +
                     " " +
-                    sessionState->dataToSend.httpMessage + 
+                    sessionState->dataToSend->httpMessage + 
                     "\r\n" +
                     "Server: " + this->getServerInfo() + "\r\n"
                 );
 
                 //send content identification headers
-                if (sessionState->dataToSend.contentLength > 0)
+                if (sessionState->dataToSend->contentLength > 0)
                 {
                     client->sendString(
-                        "Content-Type: " + sessionState->dataToSend.contentType + ";charset=utf-8\r\n" +
+                        "Content-Type: " + sessionState->dataToSend->contentType + ";charset=utf-8\r\n" +
                         "Accept-Range: bytes\r\n" +
                         "Content-Length: " +
-                        std::to_string(sessionState->dataToSend.contentLength) + 
+                        std::to_string(sessionState->dataToSend->contentLength) + 
                         "\r\n"
                     );
 
                 }
 
                 //send custom headers
-                for (unsigned int cont = 0; cont < sessionState->dataToSend.headers.size(); cont++)
+                for (unsigned int cont = 0; cont < sessionState->dataToSend->headers.size(); cont++)
                 {
-                    if (sessionState->dataToSend.headers.at(cont).size() > 1)
+                    if (sessionState->dataToSend->headers.at(cont).size() > 1)
                     {
                         //TODO: if you keep f5 pressed on browser, this line raises an error
-                        client->sendString(sessionState->dataToSend.headers.at(cont).at(0) + ": " + sessionState->dataToSend.headers.at(cont).at(1) + "\r\n");
+                        client->sendString(sessionState->dataToSend->headers.at(cont).at(0) + ": " + sessionState->dataToSend->headers.at(cont).at(1) + "\r\n");
                     }
                 }
 
@@ -612,11 +609,11 @@ namespace KWShared
                 client->sendString("\r\n");
 
                 //add content to buffer
-                client->sendData(sessionState->dataToSend.contentBody, sessionState->dataToSend.contentLength);
+                client->sendData(sessionState->dataToSend->contentBody.get(), sessionState->dataToSend->contentLength);
 
                 //convert raw buffer to char*
 
-                sessionState->dataToSend.clear();
+                sessionState->dataToSend->clear();
 
                 sessionState->state = FINISH_REQUEST;
 
@@ -658,24 +655,30 @@ namespace KWShared
 
         if (sessionState->state == FINISHED)
         {
-            if (sessionState->webSocketOpen)
-                this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
+            this->endHttpRequest(client, sessionState);
+        }
+    }
+
+    void KWTinyWebServer::endHttpRequest(shared_ptr<ClientInfo> client, KWClientSessionState* sessionState)
+    {
+        if (sessionState->webSocketOpen)
+            this->__observer->OnWebSocketConnect((sessionState->receivedData), sessionState->receivedData->resource);
+        else
+        {
+            if (isToKeepAlive(sessionState) && !sessionState->ignoreKeepAlive)
+            {
+                //delete sessionState;
+                finalizeClient(client);
+                initializeClient(client);
+                sessionState = clientsSessionsStates[client->socket];
+            }
             else
             {
-                if (isToKeepAlive(sessionState) && !sessionState->ignoreKeepAlive)
-                {
-                    //delete sessionState;
-                    finalizeClient(client);
-                    initializeClient(client);
-                    sessionState = clientsSessionsStates[client->socket];
-                }
-                else
-                {
-                    client->disconnect();
-                    //Client is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
-                }
-
+                if (!server->isConnected(client)) { return; }
+                client->disconnect();
+                //Client is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
             }
+
         }
     }
 
@@ -684,11 +687,11 @@ namespace KWShared
         return sessionState->connection.find("KEEP-ALIVE") != string::npos;
     }
 
-    void KWTinyWebServer::WebSocketProcess(ClientInfo* client)
+    void KWTinyWebServer::WebSocketProcess(shared_ptr<ClientInfo> client)
     {
         KWClientSessionState *sessionState = this->clientsSessionsStates[client->socket];
 
-        HttpData *request = &(sessionState->receivedData);
+        shared_ptr<HttpData>request = (sessionState->receivedData);
         string resource = request->resource;
 
         /*int readCount;
@@ -886,7 +889,7 @@ namespace KWShared
         }
     }
 
-    void KWTinyWebServer::__TryAutoLoadFiles(HttpData *in, HttpData *out)
+    void KWTinyWebServer::__TryAutoLoadFiles(shared_ptr<HttpData>in, shared_ptr<HttpData>out)
     {
         bool breakFors = false;
         vector<string> filesOnDirectory;
@@ -964,9 +967,9 @@ namespace KWShared
                     //load the file ontent
                     {
                         out->contentLength = sysLink.getFileSize(filePath);
-
-                        out->contentBody = new char[out->contentLength];
-                        sysLink.readFile(filePath, out->contentBody, 0, out->contentLength);
+                        
+                        out->contentBody = shared_ptr<char[]>(new char[out->contentLength]);
+                        sysLink.readFile(filePath, out->contentBody.get(), 0, out->contentLength);
                     }
 
                     //set the cache headers
@@ -1006,7 +1009,7 @@ namespace KWShared
         }
     }
 
-    void KWTinyWebServer::sendWebSocketData(ClientInfo *cli, char *data, int size, bool isText)
+    void KWTinyWebServer::sendWebSocketData(shared_ptr<ClientInfo> cli, char *data, int size, bool isText)
     {
         char headerBuffer[14]; // O buffer de cabeçalho é grande o suficiente para acomodar o cabeçalho e tamanho máximo da carga útil.
         int headerSize = 2; // Tamanho inicial do cabeçalho (sem estender para tamanhos maiores de carga útil).
@@ -1049,7 +1052,7 @@ namespace KWShared
         cli->sendData(data, size);
     }
 
-    void KWTinyWebServer::sendWebSocketData(HttpData *originalRequest, char *data, int size, bool isText)
+    void KWTinyWebServer::sendWebSocketData(shared_ptr<HttpData>originalRequest, char *data, int size, bool isText)
     {
         this->sendWebSocketData(originalRequest->client, data, size, isText);
     }
@@ -1057,13 +1060,13 @@ namespace KWShared
     void KWTinyWebServer::broadcastWebSocker(char* data, int size, bool isText, string resource)
     {
 
-        vector<ClientInfo*> cli;
+        vector<shared_ptr<ClientInfo>> cli;
         clientsSessionsStatesMutex.lock();
         for (auto &c: clientsSessionsStates)
         {
             if (c.second->webSocketOpen == true)
             {
-                if (resource == "*" || resource == "" || c.second->receivedData.resource == resource)
+                if (resource == "*" || resource == "" || c.second->receivedData->resource == resource)
                     cli.push_back(c.second->client);
             }
         }
@@ -1077,12 +1080,12 @@ namespace KWShared
 
     }
 
-    void KWTinyWebServer::disconnecteWebSocket(ClientInfo* client)
+    void KWTinyWebServer::disconnecteWebSocket(shared_ptr<ClientInfo> client)
     {
         client->disconnect();
     }
 
-    void KWTinyWebServer::disconnecteWebSocket(HttpData* originalRequest)
+    void KWTinyWebServer::disconnecteWebSocket(shared_ptr<HttpData> originalRequest)
     {
         this->disconnecteWebSocket(originalRequest->client);
     }

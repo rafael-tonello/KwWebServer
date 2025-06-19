@@ -52,102 +52,93 @@ namespace KWShared{
     };
 
     
-        class HttpData{
-        public:
-            HttpData(){}
-            HttpData(HttpData* copyFrom){
-                this->copyFrom(copyFrom);
+    class HttpData{
+    public:
+        HttpData(){}
+        HttpData(HttpData* copyFrom){
+            this->copyFrom(copyFrom);
+        }
+
+        void copyFrom(HttpData* toCopy)
+        {
+            this->clear();
+            this->client = toCopy->client;
+            this->resource = toCopy->resource;
+            this->method = toCopy->method;
+            this->contentType = toCopy->contentType;
+            this->contentLength = toCopy->contentLength;
+            this->httpStatus = toCopy->httpStatus;
+            this->httpMessage = toCopy->httpMessage;
+
+            for (auto &c: toCopy->headers)
+                this->headers.push_back({c[0], c[1]});
+
+            for (auto &c: toCopy->cookies)
+            {
+                this->cookies[c.first] = new HttpCookie(c.second);
             }
 
-            void copyFrom(HttpData* toCopy)
+            this->contentBody = shared_ptr<char[]>(new char[this->contentLength]);
+            for (unsigned int c = 0; c < this->contentLength; c++)
+                this->contentBody[c] = toCopy->contentBody[c];
+        }
+
+        ~HttpData()
+        {
+            this->clear();
+        }
+
+        void clear()
+        {
+            resource.clear();
+            this->method.clear();
+            this->contentType.clear();
+            this->setContentString("");
+            this->headers.clear();
+            this->httpMessage.clear();
+
+
+            for (auto &c: this->cookies)
             {
-                this->clear();
-                this->client = toCopy->client;
-                this->resource = toCopy->resource;
-                this->method = toCopy->method;
-                this->contentType = toCopy->contentType;
-                this->contentLength = toCopy->contentLength;
-                this->httpStatus = toCopy->httpStatus;
-                this->httpMessage = toCopy->httpMessage;
-
-                for (auto &c: toCopy->headers)
-                    this->headers.push_back({c[0], c[1]});
-
-                for (auto &c: toCopy->cookies)
-                {
-                    this->cookies[c.first] = new HttpCookie(c.second);
-                }
-
-                this->contentBody = new char[this->contentLength];
-                for (unsigned int c = 0; c < this->contentLength; c++)
-                    this->contentBody[c] = toCopy->contentBody[c];
+                //c.second->clear();
+                delete c.second;
             }
+            this->cookies.clear();
+        };
 
-            ~HttpData()
-            {
-                this->clear();
-            }
+        shared_ptr<ClientInfo> client = nullptr;
+        string resource = "";
+        string method = "";
+        string contentType = "";
+        string accept = "";
+        shared_ptr<char[]> contentBody;
+        unsigned int contentLength = 0;
+        vector<vector<string> > headers;
+        unsigned int httpStatus = 0;
+        string httpMessage = "";
+        map<string, HttpCookie*> cookies = {};
 
-            void clear()
-            {
-                resource.clear();
-                this->method.clear();
-                this->contentType.clear();
-                this->setContentString("");
-                this->headers.clear();
-                this->httpMessage.clear();
-                 
-                if (this->contentBody != NULL)
-                {
-                    delete[] this->contentBody;
-                    this->contentBody = NULL;
-                }
-
-
-                for (auto &c: this->cookies)
-                {
-                    //c.second->clear();
-                    delete c.second;
-                }
-                this->cookies.clear();
-            };
-
-            ClientInfo* client = nullptr;
-            string resource = "";
-            string method = "";
-            string contentType = "";
-            string accept = "";
-            char* contentBody = NULL;
-            unsigned int contentLength = 0;
-            vector< vector<string> > headers;
-            unsigned int httpStatus = 0;
-            string httpMessage = "";
-            map<string, HttpCookie*> cookies = {};
-
-            void setContentString(string data)
-            {
-                if (this->contentBody != NULL)
-                {
-                    delete[] this->contentBody;
-                    this->contentBody = NULL;
-                }
-
-                this->contentBody = new char[data.size()];
-                for (int cont = 0; cont < data.size(); cont++)
-                    this->contentBody[cont] = data[cont];
+        void setContentString(string data)
+        {
+            this->contentBody = shared_ptr<char[]>(new char[data.size()]);
+            for (int cont = 0; cont < data.size(); cont++)
+                this->contentBody[cont] = data[cont];
 
 
-                this->contentLength = data.size();
-            }
+            this->contentLength = data.size();
+        }
 
-            string getContentString()
-            {
-                string ret = "";
-                for (auto cont = 0; cont < this->contentLength; cont++)
-                    ret += this->contentBody[cont];
-
+        string getContentString()
+        {
+            string ret = "";
+            if (this->contentBody == NULL || this->contentLength == 0)
                 return ret;
-            }
+                
+            for (auto cont = 0; cont < this->contentLength; cont++)
+                ret += this->contentBody[cont];
+
+            return ret;
+        }
     };
 }
 

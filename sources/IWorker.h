@@ -2,18 +2,15 @@
 #define IWORKER_H
 
 #include "HttpData.h"
+#include <memory>
 
 namespace KWShared{
     class IWorker
     {
         public:
             virtual void start(void* kwwebserver) = 0;
-            virtual void load(HttpData* httpData) = 0;
-            virtual void unload(HttpData* httpData) = 0;
-
-        protected:
-
-        private:
+            virtual void load(shared_ptr<HttpData> httpData) = 0;
+            virtual void unload(shared_ptr<HttpData> httpData) = 0;
     };
 }
 

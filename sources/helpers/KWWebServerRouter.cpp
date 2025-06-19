@@ -8,10 +8,10 @@ using namespace KWShared::RoutesClasses;
 KWWebServerRouter::KWWebServerRouter(int port, vector<string> filesLocations, string dataFolder, ThreadPool* tasker) 
 { 
     serverObserver = new WebServerObserverHelper(
-        [&](HttpData* in, HttpData* out){this->OnHttpRequest(in, out); },
-        [&](HttpData *originalRequest, string resource){this->OnWebSocketConnect(originalRequest, resource); },
-        [&](HttpData *originalRequest, string resource, char* data, unsigned long long dataSize){this->OnWebSocketData(originalRequest, resource, data, dataSize); },
-        [&](HttpData *originalRequest, string resource){this->OnWebSocketDisconnect(originalRequest, resource); }
+        [&](shared_ptr<HttpData> in, shared_ptr<HttpData> out){this->OnHttpRequest(in, out); },
+        [&](shared_ptr<HttpData>originalRequest, string resource){this->OnWebSocketConnect(originalRequest, resource); },
+        [&](shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize){this->OnWebSocketData(originalRequest, resource, data, dataSize); },
+        [&](shared_ptr<HttpData>originalRequest, string resource){this->OnWebSocketDisconnect(originalRequest, resource); }
     );
 
     server = shared_ptr<KWTinyWebServer>(new KWTinyWebServer(port, serverObserver, filesLocations, dataFolder, tasker));
@@ -109,12 +109,12 @@ shared_ptr<KWTinyWebServer> KWWebServerRouter::getServer()
     return server;
 }
 
-void KWWebServerRouter::OnHttpRequest(HttpData* in, HttpData* out)
+void KWWebServerRouter::OnHttpRequest(shared_ptr<HttpData> in, shared_ptr<HttpData> out)
 {
 
     try{
         bool routeFound = identifyObservers(in->method, in->resource, requestRoutesObservers, [&](KWSRoute* item, map<string, string> vars){
-            ((KWSRequestRouteExtended*)item)->getObservers().foreach([&](int id, function<void(HttpData* in, HttpData* out, map<string, string>)> curr){
+            ((KWSRequestRouteExtended*)item)->getObservers().foreach([&](int id, function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out, map<string, string>)> curr){
                 curr(in, out, vars);
             });
         });
@@ -175,13 +175,13 @@ string KWWebServerRouter::getNestedExceptionText(exception &e, string prefix, in
     return ret;
 }
 
-void KWWebServerRouter::OnWebSocketConnect(HttpData *originalRequest, string resource)
+void KWWebServerRouter::OnWebSocketConnect(shared_ptr<HttpData>originalRequest, string resource)
 {
     connectedWebsockets.push_back(originalRequest->client);
     
     try{
         auto found = identifyObservers("WS", originalRequest->resource, websocketRoutesObservers, [&](KWSRoute* item, map<string, string> vars){
-            ((KWSWebsocketRouteExtended*)item)->getOnConnectObservers().foreach([&](int id, function<void(HttpData *oriReq, map<string, string>varList)> curr){
+            ((KWSWebsocketRouteExtended*)item)->getOnConnectObservers().foreach([&](int id, function<void(shared_ptr<HttpData>oriReq, map<string, string>varList)> curr){
                 curr(originalRequest, vars);
             });
         });
@@ -219,12 +219,12 @@ void KWWebServerRouter::OnWebSocketConnect(HttpData *originalRequest, string res
     }
 }
 
-void KWWebServerRouter::OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)
+void KWWebServerRouter::OnWebSocketData(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize)
 {
     try
     {
         identifyObservers("WS", originalRequest->resource, websocketRoutesObservers, [&](KWSRoute* item, map<string, string> vars){
-            ((KWSWebsocketRouteExtended*)item)->getOnDataObservers().foreach([&](int id, function<void(HttpData *oriRq, map<string, string>varList, string dt)> curr){
+            ((KWSWebsocketRouteExtended*)item)->getOnDataObservers().foreach([&](int id, function<void(shared_ptr<HttpData>oriRq, map<string, string>varList, string dt)> curr){
                 curr(originalRequest, vars, string(data, dataSize));
             });
         });
@@ -242,7 +242,7 @@ void KWWebServerRouter::OnWebSocketData(HttpData *originalRequest, string resour
 
 }
 
-void KWWebServerRouter::OnWebSocketDisconnect(HttpData *originalRequest, string resource)
+void KWWebServerRouter::OnWebSocketDisconnect(shared_ptr<HttpData>originalRequest, string resource)
 {
 
     try
@@ -252,7 +252,7 @@ void KWWebServerRouter::OnWebSocketDisconnect(HttpData *originalRequest, string 
             connectedWebsockets.erase(index);
 
         identifyObservers("WS", originalRequest->resource, websocketRoutesObservers, [&](KWSRoute* item, map<string, string> vars){
-            ((KWSWebsocketRouteExtended*)item)->getOnDisconnectObservers().foreach([&](int id, function<void(HttpData *oriReq, map<string, string> varList)> curr){
+            ((KWSWebsocketRouteExtended*)item)->getOnDisconnectObservers().foreach([&](int id, function<void(shared_ptr<HttpData>oriReq, map<string, string> varList)> curr){
                 curr(originalRequest, vars);
             });
         });
@@ -398,12 +398,12 @@ void KWWebServerRouter::runLocked(function<void()> f)
 
 
 
-void KWSWebsocketRoute::send(HttpData *originalRequest, string data)
+void KWSWebsocketRoute::send(shared_ptr<HttpData>originalRequest, string data)
 {
     this->send(originalRequest->client, data);
 }
 
-void KWSWebsocketRoute::send(ClientInfo *client, string data)
+void KWSWebsocketRoute::send(shared_ptr<ClientInfo> client, string data)
 {
     this->router->getServer()->sendWebSocketData(client, (char*)data.c_str(), (int)data.size(), true);
 

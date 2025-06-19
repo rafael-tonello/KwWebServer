@@ -24,16 +24,16 @@ namespace KWShared{
     class WebServerObserverHelper: public WebServerObserver
     {
     private:
-        function<void(HttpData* in, HttpData* out)> onHttpRequest;
-        function<void(HttpData *originalRequest, string resource)> onWebSocketConnect;
-        function<void(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData;
-        function<void(HttpData *originalRequest, string resource)> onWebSocketDisconnect;
+        function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out)> onHttpRequest;
+        function<void(shared_ptr<HttpData>originalRequest, string resource)> onWebSocketConnect;
+        function<void(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData;
+        function<void(shared_ptr<HttpData>originalRequest, string resource)> onWebSocketDisconnect;
     public:
         WebServerObserverHelper(
-            function<void(HttpData* in, HttpData* out)> onHttpRequest,
-            function<void(HttpData *originalRequest, string resource)> onWebSocketConnect = [](HttpData *originalRequest, string resource){},
-            function<void(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData = [](HttpData *originalRequest, string resource, char* data, unsigned long long dataSize){},
-            function<void(HttpData *originalRequest, string resource)> onWebSocketDisconnect = [](HttpData *originalRequest, string resource){}
+            function<void(shared_ptr<HttpData> in, shared_ptr<HttpData> out)> onHttpRequest,
+            function<void(shared_ptr<HttpData>originalRequest, string resource)> onWebSocketConnect = [](shared_ptr<HttpData>originalRequest, string resource){},
+            function<void(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize)> onWebSocketData = [](shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize){},
+            function<void(shared_ptr<HttpData>originalRequest, string resource)> onWebSocketDisconnect = [](shared_ptr<HttpData>originalRequest, string resource){}
         ){
             this->onHttpRequest = onHttpRequest;
             this->onWebSocketConnect = onWebSocketConnect;
@@ -45,22 +45,22 @@ namespace KWShared{
             while (true) usleep(10000);
         }
 
-        void OnHttpRequest(HttpData* in, HttpData* out)
+        void OnHttpRequest(shared_ptr<HttpData> in, shared_ptr<HttpData> out)
         {
             this->onHttpRequest(in, out);
         }
 
-        void OnWebSocketConnect(HttpData *originalRequest, string resource)
+        void OnWebSocketConnect(shared_ptr<HttpData>originalRequest, string resource)
         {
             this->onWebSocketConnect(originalRequest, resource);
         }
 
-        void OnWebSocketData(HttpData *originalRequest, string resource, char* data, unsigned long long dataSize)
+        void OnWebSocketData(shared_ptr<HttpData>originalRequest, string resource, char* data, unsigned long long dataSize)
         {
             this->onWebSocketData(originalRequest, resource, data, dataSize);
         }
 
-        void OnWebSocketDisconnect(HttpData *originalRequest, string resource)
+        void OnWebSocketDisconnect(shared_ptr<HttpData>originalRequest, string resource)
         {
             this->onWebSocketDisconnect(originalRequest, resource);
         }
