@@ -60,11 +60,11 @@ namespace KWShared{
 
             };
 
-            void load(HttpData* httpData){ }
+            void load(shared_ptr<HttpData> httpData){ }
 
-            void unload(HttpData* httpData){ }
+            void unload(shared_ptr<HttpData> httpData){ }
 
-            void setSessionData(HttpData* httpData, JSON session){
+            void setSessionData(shared_ptr<HttpData> httpData, JSON session){
                 
                 string sessionFileName = getFileNameFromSsid(getSSID(httpData));
                 //write data to file
@@ -84,7 +84,7 @@ namespace KWShared{
                 sysLink.unlockFile(sessionFileName);
             }
 
-            JSON getSessionData(HttpData* httpData)
+            JSON getSessionData(shared_ptr<HttpData> httpData)
             {
                 //determine the fiename of file with session data
                 string sessionFileName = getFileNameFromSsid(getSSID(httpData));
@@ -104,7 +104,7 @@ namespace KWShared{
 
             }
 
-            string getSSID(HttpData* httpData)
+            string getSSID(shared_ptr<HttpData> httpData)
             {
                 string ssid = "";
 

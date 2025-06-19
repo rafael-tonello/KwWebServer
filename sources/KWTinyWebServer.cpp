@@ -25,13 +25,15 @@ namespace KWShared
         string sslKey,
         string sslPublicCert)
     {
+        this->setServerInfo(this->_serverName+ ", version " + this->_serverVersion);
+
         if (tasker != NULL)
         {
             cout << "using a custom tasker for httpserver" << endl;
             this->__tasks = tasker;
         }
         else
-            this->__tasks = new ThreadPool(0, 0, "KWBSrvrTsks");
+            this->__tasks = new ThreadPool(5, 0, "KWBSrvrTsks");
 
         if (dataFolder == "_AUTO_DEFINE_" || dataFolder == "")
         {
@@ -45,11 +47,6 @@ namespace KWShared
 
         this->__dataFolder = dataFolder;
 
-        this->__serverName = "KWTinyWebServer embeded server, version 2.2.0";
-        //                                                            | | |
-        //                                                            | | +------> Bugs fixes and compilation
-        //                                                            | +--------> New features
-        //                                                            +----------> Big changes, architecture changes and incompatibilities
         this->__observer = observer;
         this->__filesLocations = filesLocations;
 //ctor
@@ -84,7 +81,7 @@ namespace KWShared
         }
 
         this->server->addConEventListener(
-            [this](ClientInfo *client, CONN_EVENT event)
+            [this](shared_ptr<ClientInfo> client, CONN_EVENT event)
             {
                 if (event == CONN_EVENT::CONNECTED)
                     this->initializeClient(client);
@@ -94,9 +91,35 @@ namespace KWShared
         );
 
         this->server->addReceiveListener(
-            [this](ClientInfo *client, char *data, size_t dataSize)
+            [=](shared_ptr<ClientInfo> client, char *data, size_t dataSize)
             {
-                this->dataReceivedFrom(client, data, dataSize);
+                if (this->clientsSessionsStates.count(client->socket) <= 0)
+                {
+                    //client->disconnect();
+                    return;
+                    //throw std::runtime_error("data received for a no intialized client");
+                }
+
+                auto clientState = this->clientsSessionsStates[client->socket];
+
+                clientState->incomingDataLocker.lock();
+                //apend incoming data to clientState->incomingDataBuffer
+                for (size_t cont = 0; cont < dataSize; cont++)
+                    clientState->incomingDataBuffer.push(data[cont]);
+                
+
+                if (!clientState->processingIncomingData)
+                {
+                    clientState->processingIncomingData = true;
+                    
+                    this->__tasks->enqueue([=](){
+                        if (!server->isConnected(client)) { return; }
+
+                        this->dataReceivedFrom(client);
+                        clientState->processingIncomingData = false;
+                    });
+                }
+                clientState->incomingDataLocker.unlock();
             }
         );
     }
@@ -107,20 +130,22 @@ namespace KWShared
         delete this->server;
     }
 
-    void KWTinyWebServer::initializeClient(ClientInfo *client)
+    void KWTinyWebServer::initializeClient(shared_ptr<ClientInfo> client)
     {
+        if (clientsSessionsStates.count(client->socket) > 0)
+            delete clientsSessionsStates[client->socket];
+
         auto tmp = new KWClientSessionState();
         tmp->client = client;
-        tmp->receivedData.client = client;
-        tmp->dataToSend.client = client;
+        tmp->receivedData->client = client;
+        tmp->dataToSend->client = client;
 
         clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
         clientsSessionsStatesMutex.unlock();
     }
 
-    void KWTinyWebServer::finalizeClient(ClientInfo *client)
-
+    void KWTinyWebServer::finalizeClient(shared_ptr<ClientInfo> client)
     {
         clientsSessionsStatesMutex.lock();
         if (clientsSessionsStates.count(client->socket) > 0)
@@ -129,17 +154,19 @@ namespace KWShared
             {
                 //finalize websocket
                 clientsSessionsStates[client->socket]->webSocketState = WS_FINISHED;
-                WebSocketProcess(client, (char*)"", 0);
+                WebSocketProcess(client);
             }
 
-            clientsSessionsStates[client->socket]->receivedData.clear();
-            clientsSessionsStates[client->socket]->dataToSend.clear();
-
-            //does not delete the clie here. It will be deleteted by the TCPServer lib
-            delete clientsSessionsStates[client->socket];
-
+            clientsSessionsStates[client->socket]->receivedData->clear();
+            clientsSessionsStates[client->socket]->dataToSend->clear();
 
             clientsSessionsStates.erase(client->socket);
+
+            
+            //todo: discover why this is crashing the server
+            //delete clientsSessionsStates[client->socket];
+
+
         }
         clientsSessionsStatesMutex.unlock();
     }
@@ -176,126 +203,224 @@ namespace KWShared
 		#endif
 	}*/
 
-    void KWTinyWebServer::dataReceivedFrom(ClientInfo *client, char *data, size_t dataSize)
+    void KWTinyWebServer::dataReceivedFrom(shared_ptr<ClientInfo> client)
     {
+        const string validVerbCharacters="ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
 
         if (clientsSessionsStates.count(client->socket) <= 0)
+        {
+            cerr << "received data from a not initialized client (client not found)" << endl;
             return;
             //throw std::runtime_error("data received for a no intialized client");
+        }
 
         KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
+
+        if (sessionState == nullptr)
+        {
+            cerr << "received data from a not initialized client (client found but sessionState is null)" << endl;
+            return;
+            //throw std::runtime_error("data received for a no intialized client");
+        }
 
         string keyUpper = "";
         char dtStr[256];
         time_t t;
         struct tm *timep;
-        string bufferStr = "";
-        vector<string> tempHeaderParts;
-
-       
+        char tmpData;
 
         if (sessionState->webSocketOpen)
         {
-            WebSocketProcess(client, data, dataSize);
+            WebSocketProcess(client);
 
             return;
         }
 
-
         size_t cont = 0;
 
-        while ((sessionState->state != SEND_REQUEST_TO_APP) && (sessionState->state != ERROR_500_INTERNALSERVERERROR) && (sessionState->state != FINISHED) && cont < dataSize)
+        while (
+            (sessionState->state != SEND_REQUEST_TO_APP)
+            && (sessionState->state != ERROR_400_BADREQUEST) 
+            && (sessionState->state != ERROR_500_INTERNALSERVERERROR) 
+            && (sessionState->state != ERROR_501_NOT_IMPLEMENTED) 
+            && (sessionState->state != FINISHED) 
+            && (sessionState->incomingDataBuffer.size() > 0)
+        )
         {
             sessionState->prevState = sessionState->state;
             {
                 switch (sessionState->state)
                 {
-                case AWAIT_HTTP_FIRST_LINE:
-                    bufferStr += data[cont];
-                    if (bufferStr.find("\r\n") != string::npos)
+                case READING_VERB:
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    if (tmpData == ' ')
+                    {
+                        bool valid = true;
+                        for (unsigned int cont2 = 0; cont2 < sessionState->bufferStr.size(); cont2++)
+                        {
+                            if (validVerbCharacters.find(sessionState->bufferStr[cont2]) == string::npos)
+                            {
+                                this->debug("Client sent a invalid verb: " + sessionState->bufferStr);
+                                sessionState->internalServerErrorMessage = "Invalid HTTP request";
+                                sessionState->state = ERROR_400_BADREQUEST;
+                                sessionState->ignoreKeepAlive = true;
+                                valid = false;
+                                break;
+                            }
+                        }
+
+                        if (valid){
+                            sessionState->receivedData->method = sessionState->bufferStr;
+                            //a header was received
+                            sessionState->state = AWAIT_REMAIN_OF_HTTP_FIRST_LINE;
+                            sessionState->bufferStr.clear();
+                        }
+                    }
+                    //just a security to avoid a infinite loops.
+                    else if (sessionState->bufferStr.size() > 30) 
+                    {
+                        //TODO: \026\003\001 may be the client trying to do a SSL connection
+                        if (sessionState->bufferStr.find("\026\003\001") != string::npos)
+                        {
+                            this->debug("Maybe the client is trying to do a SSL connection. This instance of the HTTP server was not started with SSL support");
+                            sessionState->internalServerErrorMessage = "SSL connection not supported because this instance of the server was not started with SSL support";
+                            sessionState->state = ERROR_400_BADREQUEST;
+                            sessionState->ignoreKeepAlive = true;
+                        }
+                        else
+                        {
+                            this->debug("Client sent a too long verb: " + sessionState->bufferStr);
+                            sessionState->internalServerErrorMessage = "Invalid HTTP request";
+                            sessionState->state = ERROR_400_BADREQUEST;
+                            sessionState->ignoreKeepAlive = true;
+                        }
+                    }
+                    else
+                        sessionState->bufferStr += tmpData;
+                
+                    break;
+                case AWAIT_REMAIN_OF_HTTP_FIRST_LINE:
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    sessionState->bufferStr += tmpData;
+
+
+
+                    if (sessionState->bufferStr.find("\r\n") != string::npos)
                     {
                         //a header was received
                         //process first line, that contains method and resource
-                        StringUtils::split(bufferStr, " ", &tempHeaderParts);
+                        sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, " ");
 
                         //checks if the first session line (GET /resource HTTP_Version) is valid
-                        if (tempHeaderParts.size() > 1)
+                        if (sessionState->tempHeaderParts.size() > 1)
                         {
 
-                            sessionState->receivedData.method = tempHeaderParts.at(0);
-                            sessionState->receivedData.resource = tempHeaderParts.at(1);
-                            sessionState->receivedData.contentLength = 0;
+                            
+                            sessionState->receivedData->resource = sessionState->tempHeaderParts.at(0);
+                            auto httpVersion = sessionState->tempHeaderParts.at(1);
+                            sessionState->receivedData->contentLength = 0;
+				
+                            if (StringUtils::toUpper(httpVersion) != string("HTTP/1.1\r\n"))
+                            {
+                                this->debug("Client sent a invalid HTTP version: " + httpVersion);
+                                sessionState->internalServerErrorMessage = "Invalid HTTP version (only HTTP/1.1 is supported)";
+                                sessionState->state = ERROR_501_NOT_IMPLEMENTED;
+                                sessionState->ignoreKeepAlive = true;
+                                break;
+                            }
+                            
                         }
                         else
                         {
+                            this->debug("Client sent a invalid HTTP request: " + sessionState->bufferStr);
                             sessionState->internalServerErrorMessage = "Invalid HTTP request";
                             sessionState->state = ERROR_500_INTERNALSERVERERROR;
+                            sessionState->ignoreKeepAlive = true;
                             break;
                         }
 
-                        bufferStr.clear();
+                        sessionState->bufferStr.clear();
 
                         //start read headers
                         sessionState->state = READING_HEADER;
-                    };
+                    }
+
                     break;
                 case READING_HEADER:
-                    bufferStr += data[cont];
-                    if (bufferStr.find("\r\n") != string::npos)
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
+
+                    sessionState->bufferStr += tmpData;
+                    if (sessionState->bufferStr.find("\r\n") != string::npos)
                     {
-                        if (bufferStr != "\r\n")
+                        if (sessionState->bufferStr != "\r\n")
                         {
-                            //remote the "\r\n" from bufferStr
-                            bufferStr.erase(bufferStr.size() - 2, 2);
-                            StringUtils::split(bufferStr, ":", &tempHeaderParts);
+                            //remote the "\r\n" from sessionState->bufferStr
+                            sessionState->bufferStr.erase(sessionState->bufferStr.size() - 2, 2);
+                            sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, ":");
 
                             //remove possible  ' ' from start of value
-                            if (tempHeaderParts[1].size() > 0 && tempHeaderParts[1][0] == ' ')
-                                tempHeaderParts[1].erase(0, 1);
+                            if (sessionState->tempHeaderParts.size() > 1 && sessionState->tempHeaderParts[1].size() > 0 && sessionState->tempHeaderParts[1][0] == ' ')
+                                sessionState->tempHeaderParts[1].erase(0, 1);
 
-                            if (tempHeaderParts.size() > 1)
+                            if (sessionState->tempHeaderParts.size() > 1)
                             {
-                                keyUpper = StringUtils::toUpper(tempHeaderParts.at(0));
-                                tempHeaderParts[0] = keyUpper;
+                                keyUpper = StringUtils::toUpper(sessionState->tempHeaderParts.at(0));
+                                sessionState->tempHeaderParts[0] = keyUpper;
 
-                                sessionState->receivedData.headers.push_back(tempHeaderParts);
+                                sessionState->receivedData->headers.push_back(sessionState->tempHeaderParts);
 
                                 if (keyUpper == "CONTENT-LENGTH")
-                                    sessionState->receivedData.contentLength = atoi(tempHeaderParts.at(1).c_str());
+                                    sessionState->receivedData->contentLength = atoi(sessionState->tempHeaderParts.at(1).c_str());
                                 else if (keyUpper == "CONTENT-TYPE")
-                                    sessionState->receivedData.contentType = tempHeaderParts.at(1);
+                                    sessionState->receivedData->contentType = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "ACCEPT")
-                                    sessionState->receivedData.accept = tempHeaderParts.at(1);
+                                    sessionState->receivedData->accept = sessionState->tempHeaderParts.at(1);
                                 else if (keyUpper == "CONNECTION")
-                                    sessionState->connection = StringUtils::toUpper(tempHeaderParts.at(1));
+                                    sessionState->connection = StringUtils::toUpper(sessionState->tempHeaderParts.at(1));
                                 else if (keyUpper == "UPGRADE")
-                                    sessionState->upgrade = StringUtils::toUpper(tempHeaderParts.at(1));
+                                    sessionState->upgrade = StringUtils::toUpper(sessionState->tempHeaderParts.at(1));
                             }
 
-                            //#%%%%%%%%%% pode ser que esta fun��o limpe os dados que est�o indo apra o receivedData
-                            tempHeaderParts.clear();
+                            sessionState->tempHeaderParts.clear();
                         }
                         else
                         {
-                            if (sessionState->receivedData.contentLength == 0)
+                            if (sessionState->receivedData->contentLength == 0)
                                 sessionState->state = SEND_REQUEST_TO_APP;
                             else
                             {
                                 sessionState->state = AWAIT_CONTENT;
-                                sessionState->receivedData.contentBody = new char[sessionState->receivedData.contentLength + 1];
-                                sessionState->receivedData.contentBody[sessionState->receivedData.contentLength] = 0;
+                                
+                                sessionState->receivedData->contentBody = shared_ptr<char[]>(new char[sessionState->receivedData->contentLength + 1]);
+                                sessionState->receivedData->contentBody[sessionState->receivedData->contentLength] = 0;
                                 sessionState->currentContentLength = 0;
                             }
                         }
 
-                        bufferStr.clear();
+                        sessionState->bufferStr.clear();
                     }
 
                     break;
                 case AWAIT_CONTENT:
-                    sessionState->receivedData.contentBody[sessionState->currentContentLength++] = data[cont];
+                    sessionState->incomingDataLocker.lock();
+                    tmpData = sessionState->incomingDataBuffer.front();
+                    sessionState->incomingDataBuffer.pop();
+                    sessionState->incomingDataLocker.unlock();
 
-                    if (sessionState->currentContentLength == sessionState->receivedData.contentLength)
+                    sessionState->receivedData->contentBody[sessionState->currentContentLength++] = tmpData;
+
+                    if (sessionState->currentContentLength == sessionState->receivedData->contentLength)
                     {
                         //rawBuffer.clear();
                         sessionState->state = SEND_REQUEST_TO_APP;
@@ -313,10 +438,21 @@ namespace KWShared
 
         if (sessionState->connection.find("UPGRADE") != string::npos && sessionState->upgrade.find("WEBSOCKET") != string::npos)
         {
-
-            sessionState->dataToSend.httpStatus = 101;
-            sessionState->receivedData.httpStatus = 101;
+            sessionState->dataToSend->httpStatus = 101;
+            sessionState->receivedData->httpStatus = 101;
         }
+
+        //check if first part (read of headers and content) of the request is finished
+        if (
+            sessionState->state == READING_VERB
+            || sessionState->state == AWAIT_REMAIN_OF_HTTP_FIRST_LINE
+            || sessionState->state == READING_HEADER
+            || sessionState->state == AWAIT_CONTENT
+        )
+        {
+            return;
+        }
+
         while (sessionState->state != FINISHED)
         {
             sessionState->prevState = sessionState->state;
@@ -329,37 +465,38 @@ namespace KWShared
                 t = time(0);
                 timep = gmtime(&t);
                 strftime(dtStr, 256, "%a, %d %b %Y %T GMT", timep);
-                sessionState->dataToSend.headers.push_back({"date", string(dtStr)});
+                sessionState->dataToSend->headers.push_back({"date", string(dtStr)});
                 //try autosendFiles
-                if (sessionState->dataToSend.httpStatus != 101)
-                    this->__TryAutoLoadFiles(&sessionState->receivedData, &sessionState->dataToSend);
+                if (sessionState->dataToSend->httpStatus != 101)
+                    this->__TryAutoLoadFiles(sessionState->receivedData, sessionState->dataToSend);
                 //notify workers
                 for (auto &curr : this->__workers)
-                    curr->load(&sessionState->receivedData);
+                    curr->load(sessionState->receivedData);
 
                 //copy cookies and session data from receivedData to dataToSend
-                for (auto &curr : sessionState->receivedData.cookies)
+                for (auto &curr : sessionState->receivedData->cookies)
                 {
-                    if (sessionState->dataToSend.cookies.find(curr.first) != sessionState->dataToSend.cookies.end())
-                        sessionState->dataToSend.cookies[curr.first]->copyFrom(curr.second);
+                    if (sessionState->dataToSend->cookies.find(curr.first) != sessionState->dataToSend->cookies.end())
+                        sessionState->dataToSend->cookies[curr.first]->copyFrom(curr.second);
                     else
-                        sessionState->dataToSend.cookies[curr.first] = new HttpCookie(curr.second);
+                        sessionState->dataToSend->cookies[curr.first] = new HttpCookie(curr.second);
                 }
 
-                this->__observer->OnHttpRequest(&sessionState->receivedData, &sessionState->dataToSend);
+                this->__observer->OnHttpRequest(sessionState->receivedData, sessionState->dataToSend);
 
                 //clear used data
 
-                if (sessionState->dataToSend.httpStatus == 0 && sessionState->dataToSend.contentType == "")
+                if (sessionState->dataToSend->httpStatus == 0 && sessionState->dataToSend->contentType == "")
                 {
-                    sessionState->dataToSend.httpStatus = 404;
-                    sessionState->dataToSend.httpMessage = "Not found";
-                    sessionState->dataToSend.contentLength = 0;
+                    sessionState->dataToSend->httpStatus = 404;
+                    sessionState->dataToSend->httpMessage = "Not found";
+                    sessionState->dataToSend->contentLength = 0;
+                    sessionState->ignoreKeepAlive = true;
                 }
 
                 for (auto &curr : this->__workers)
                 {
-                    curr->unload(&sessionState->dataToSend);
+                    curr->unload(sessionState->dataToSend);
                 }
 
                 sessionState->state = CHECK_PROTOCOL_CHANGE;
@@ -368,16 +505,16 @@ namespace KWShared
             case CHECK_PROTOCOL_CHANGE:
                 sessionState->state = SEND_RESPONSE;
                 //check if http request is an protocol change request
-                if (sessionState->receivedData.httpStatus == 101)
+                if (sessionState->receivedData->httpStatus == 101)
                 {
-                    sessionState->dataToSend.contentBody = new char[0];
-                    sessionState->dataToSend.contentLength = 0;
+                    sessionState->dataToSend->contentBody = shared_ptr<char[]>(new char[0]);
+                    sessionState->dataToSend->contentLength = 0;
 
                     //WEBSOCKET CONNECTION (START ANOTHER THREAD TO WORK WITH CONNECTIN, SEND ACCEPTANCE TO CLIENT AND EXTI FROM HTTP PARSING PROCESS)
                     string secWebSocketKey = "";
 
                     //lock for SEC-WEBSOCKET-KEY key
-                    for (auto &p : sessionState->receivedData.headers)
+                    for (auto &p : sessionState->receivedData->headers)
                     {
                         if (p[0] == "SEC-WEBSOCKET-KEY")
                             secWebSocketKey = p[1];
@@ -392,20 +529,19 @@ namespace KWShared
                         string secWebSocketBase64 = StringUtils::base64_encode(sha1result, SHA_DIGEST_LENGTH);
 
                         //prepare the http response to client
-                        sessionState->dataToSend.httpStatus = 101;
-                        sessionState->dataToSend.httpMessage = "Switching Protocols";
-                        sessionState->dataToSend.setContentString("");
-                        sessionState->dataToSend.headers.push_back({"Upgrade", "websocket"});
-                        sessionState->dataToSend.headers.push_back({"Connection", "Upgrade"});
-                        sessionState->dataToSend.headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
+                        sessionState->dataToSend->httpStatus = 101;
+                        sessionState->dataToSend->httpMessage = "Switching Protocols";
+                        sessionState->dataToSend->setContentString("");
+                        sessionState->dataToSend->headers.push_back({"Upgrade", "websocket"});
+                        sessionState->dataToSend->headers.push_back({"Connection", "Upgrade"});
+                        sessionState->dataToSend->headers.push_back({"Sec-WebSocket-Accept", secWebSocketBase64});
 
                         secWebSocketBase64.clear();
                         concat.clear();
 
                         //create a new thread to work with the web socket connection
                         pthread_t *thWebSocketProcess = new pthread_t;
-                        void **tmp = new void *[4];
-                        HttpData *cl = new HttpData(&sessionState->receivedData);
+                        auto cl = shared_ptr<HttpData>(new HttpData(sessionState->receivedData.get()));
                         sessionState->webSocketOpen = true;
 
                         sessionState->state = SEND_RESPONSE;
@@ -415,56 +551,57 @@ namespace KWShared
                 }
                 else
                 {
-                    sessionState->dataToSend.headers.push_back({"Connection", "Close"});
+                    sessionState->dataToSend->headers.push_back({"Connection", "Close"});
                 }
                 break;
             case SEND_RESPONSE:
 
                 //send first line and server name
-                if (sessionState->dataToSend.httpStatus == 0)
+                if (sessionState->dataToSend->httpStatus == 0)
                 {
-                    if (sessionState->dataToSend.contentLength == 0)
+                    if (sessionState->dataToSend->contentLength == 0)
                     {
-                        sessionState->dataToSend.httpStatus = 204;
-                        sessionState->dataToSend.httpMessage = "No content";
+                        sessionState->dataToSend->httpStatus = 204;
+                        sessionState->dataToSend->httpMessage = "No content";
                     }
                     else
                     {
-                        sessionState->dataToSend.httpStatus = 200;
-                        sessionState->dataToSend.httpMessage = "OK";
+                        sessionState->dataToSend->httpStatus = 200;
+                        sessionState->dataToSend->httpMessage = "OK";
                     }
 
                 }
 
+                if (!server->isConnected(client)) { sessionState->state = FINISHED; endHttpRequest(client, sessionState); return; }
                 client->sendString(
                     "HTTP/1.1 " +
-                    std::to_string(sessionState->dataToSend.httpStatus) +
+                    std::to_string(sessionState->dataToSend->httpStatus) +
                     " " +
-                    sessionState->dataToSend.httpMessage + 
+                    sessionState->dataToSend->httpMessage + 
                     "\r\n" +
-                    "Server: " + this->__serverName + "\r\n"
+                    "Server: " + this->getServerInfo() + "\r\n"
                 );
 
                 //send content identification headers
-                if (sessionState->dataToSend.contentLength > 0)
+                if (sessionState->dataToSend->contentLength > 0)
                 {
                     client->sendString(
-                        "Content-Type: " + sessionState->dataToSend.contentType + ";charset=utf-8\r\n" +
+                        "Content-Type: " + sessionState->dataToSend->contentType + ";charset=utf-8\r\n" +
                         "Accept-Range: bytes\r\n" +
                         "Content-Length: " +
-                        std::to_string(sessionState->dataToSend.contentLength) + 
+                        std::to_string(sessionState->dataToSend->contentLength) + 
                         "\r\n"
                     );
 
                 }
 
                 //send custom headers
-                for (unsigned int cont = 0; cont < sessionState->dataToSend.headers.size(); cont++)
+                for (unsigned int cont = 0; cont < sessionState->dataToSend->headers.size(); cont++)
                 {
-                    if (sessionState->dataToSend.headers.at(cont).size() > 1)
+                    if (sessionState->dataToSend->headers.at(cont).size() > 1)
                     {
                         //TODO: if you keep f5 pressed on browser, this line raises an error
-                        client->sendString(sessionState->dataToSend.headers.at(cont).at(0) + ": " + sessionState->dataToSend.headers.at(cont).at(1) + "\r\n");
+                        client->sendString(sessionState->dataToSend->headers.at(cont).at(0) + ": " + sessionState->dataToSend->headers.at(cont).at(1) + "\r\n");
                     }
                 }
 
@@ -472,11 +609,11 @@ namespace KWShared
                 client->sendString("\r\n");
 
                 //add content to buffer
-                client->sendData(sessionState->dataToSend.contentBody, sessionState->dataToSend.contentLength);
+                client->sendData(sessionState->dataToSend->contentBody.get(), sessionState->dataToSend->contentLength);
 
                 //convert raw buffer to char*
 
-                sessionState->dataToSend.clear();
+                sessionState->dataToSend->clear();
 
                 sessionState->state = FINISH_REQUEST;
 
@@ -487,18 +624,30 @@ namespace KWShared
             case ERROR_400_BADREQUEST:
                 client->sendString(
                     string("HTTP/1.1 400 Bad request \r\n") +
-                    string("Server: ") + this->__serverName + string("\r\n")
+                    string("Server: ") + this->getServerInfo() + string("\r\n")
                 );
                 sessionState->state = FINISHED;
                 break;
             case ERROR_500_INTERNALSERVERERROR:
                 client->sendString(
                     "HTTP/1.1 500 "+sessionState->internalServerErrorMessage+" \r\n" +
-                    "Server: " + this->__serverName + "\r\n"
+                    "Server: " + this->getServerInfo() + "\r\n"
+                );
+                sessionState->state = FINISHED;
+                break;
+            case ERROR_501_NOT_IMPLEMENTED:
+                client->sendString(
+                    "HTTP/1.1 501 "+sessionState->internalServerErrorMessage+" \r\n" +
+                    "Server: " + this->getServerInfo() + "\r\n"
                 );
                 sessionState->state = FINISHED;
                 break;
             default:
+                client->sendString(
+                    "HTTP/1.1 500 Server entered in a invalid state: "+to_string((int)sessionState->state)+" \r\n" +
+                    "Server: " + this->getServerInfo() + "\r\n"
+                );
+                sessionState->state = FINISHED;
                 break;
             }
             cont++;
@@ -506,25 +655,30 @@ namespace KWShared
 
         if (sessionState->state == FINISHED)
         {
-            if (sessionState->webSocketOpen)
-                this->__observer->OnWebSocketConnect(&(sessionState->receivedData), sessionState->receivedData.resource);
+            this->endHttpRequest(client, sessionState);
+        }
+    }
+
+    void KWTinyWebServer::endHttpRequest(shared_ptr<ClientInfo> client, KWClientSessionState* sessionState)
+    {
+        if (sessionState->webSocketOpen)
+            this->__observer->OnWebSocketConnect((sessionState->receivedData), sessionState->receivedData->resource);
+        else
+        {
+            if (isToKeepAlive(sessionState) && !sessionState->ignoreKeepAlive)
+            {
+                //delete sessionState;
+                finalizeClient(client);
+                initializeClient(client);
+                sessionState = clientsSessionsStates[client->socket];
+            }
             else
             {
-                if (isToKeepAlive(sessionState))
-                {
-                    sessionState->receivedData.clear();
-                    delete sessionState;
-
-                    initializeClient(client);
-                    sessionState = clientsSessionsStates[client->socket];
-                }
-                else
-                {
-                    client->disconnect();
-                    sessionState->receivedData.clear();
-                }
-
+                if (!server->isConnected(client)) { return; }
+                client->disconnect();
+                //Client is finalized when TCPServer emits a event about the client disconnection (see this in the constructor)
             }
+
         }
     }
 
@@ -533,11 +687,11 @@ namespace KWShared
         return sessionState->connection.find("KEEP-ALIVE") != string::npos;
     }
 
-    void KWTinyWebServer::WebSocketProcess(ClientInfo* client, char* data, size_t dataSize)
+    void KWTinyWebServer::WebSocketProcess(shared_ptr<ClientInfo> client)
     {
         KWClientSessionState *sessionState = this->clientsSessionsStates[client->socket];
 
-        HttpData *request = &(sessionState->receivedData);
+        shared_ptr<HttpData>request = (sessionState->receivedData);
         string resource = request->resource;
 
         /*int readCount;
@@ -556,9 +710,12 @@ namespace KWShared
         
         char ws_curr;
 
-        for (size_t cont = 0; cont < dataSize && sessionState->webSocketState != WS_FINISHED; cont++)
+        for (size_t cont = 0; sessionState->incomingDataBuffer.size() > 0 && sessionState->webSocketState != WS_FINISHED; cont++)
         {
-            ws_curr = data[cont];
+            sessionState->incomingDataLocker.lock();
+            ws_curr = sessionState->incomingDataBuffer.front();
+            sessionState->incomingDataBuffer.pop();
+            sessionState->incomingDataLocker.unlock();
             //READ DATA FROM SOCKET
 
             switch (sessionState->webSocketState)
@@ -732,7 +889,7 @@ namespace KWShared
         }
     }
 
-    void KWTinyWebServer::__TryAutoLoadFiles(HttpData *in, HttpData *out)
+    void KWTinyWebServer::__TryAutoLoadFiles(shared_ptr<HttpData>in, shared_ptr<HttpData>out)
     {
         bool breakFors = false;
         vector<string> filesOnDirectory;
@@ -810,9 +967,9 @@ namespace KWShared
                     //load the file ontent
                     {
                         out->contentLength = sysLink.getFileSize(filePath);
-
-                        out->contentBody = new char[out->contentLength];
-                        sysLink.readFile(filePath, out->contentBody, 0, out->contentLength);
+                        
+                        out->contentBody = shared_ptr<char[]>(new char[out->contentLength]);
+                        sysLink.readFile(filePath, out->contentBody.get(), 0, out->contentLength);
                     }
 
                     //set the cache headers
@@ -852,7 +1009,7 @@ namespace KWShared
         }
     }
 
-    void KWTinyWebServer::sendWebSocketData(ClientInfo *cli, char *data, int size, bool isText)
+    void KWTinyWebServer::sendWebSocketData(shared_ptr<ClientInfo> cli, char *data, int size, bool isText)
     {
         char headerBuffer[14]; // O buffer de cabeçalho é grande o suficiente para acomodar o cabeçalho e tamanho máximo da carga útil.
         int headerSize = 2; // Tamanho inicial do cabeçalho (sem estender para tamanhos maiores de carga útil).
@@ -895,7 +1052,7 @@ namespace KWShared
         cli->sendData(data, size);
     }
 
-    void KWTinyWebServer::sendWebSocketData(HttpData *originalRequest, char *data, int size, bool isText)
+    void KWTinyWebServer::sendWebSocketData(shared_ptr<HttpData>originalRequest, char *data, int size, bool isText)
     {
         this->sendWebSocketData(originalRequest->client, data, size, isText);
     }
@@ -903,13 +1060,13 @@ namespace KWShared
     void KWTinyWebServer::broadcastWebSocker(char* data, int size, bool isText, string resource)
     {
 
-        vector<ClientInfo*> cli;
+        vector<shared_ptr<ClientInfo>> cli;
         clientsSessionsStatesMutex.lock();
         for (auto &c: clientsSessionsStates)
         {
             if (c.second->webSocketOpen == true)
             {
-                if (resource == "*" || resource == "" || c.second->receivedData.resource == resource)
+                if (resource == "*" || resource == "" || c.second->receivedData->resource == resource)
                     cli.push_back(c.second->client);
             }
         }
@@ -923,12 +1080,12 @@ namespace KWShared
 
     }
 
-    void KWTinyWebServer::disconnecteWebSocket(ClientInfo* client)
+    void KWTinyWebServer::disconnecteWebSocket(shared_ptr<ClientInfo> client)
     {
         client->disconnect();
     }
 
-    void KWTinyWebServer::disconnecteWebSocket(HttpData* originalRequest)
+    void KWTinyWebServer::disconnecteWebSocket(shared_ptr<HttpData> originalRequest)
     {
         this->disconnecteWebSocket(originalRequest->client);
     }
