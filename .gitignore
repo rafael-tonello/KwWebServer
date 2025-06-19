@@ -1,0 +1,11 @@
+#gitignore for c++ projects
+#compiled files
+*.o
+
+#executable files
+*.exe
+*.out
+*.binc
+
+#build folder
+build/
