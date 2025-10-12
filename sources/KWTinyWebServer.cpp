@@ -139,6 +139,8 @@ namespace KWShared
         tmp->client = client;
         tmp->receivedData->client = client;
         tmp->dataToSend->client = client;
+        tmp->state = READING_VERB;
+        tmp->connection = "KEEP-ALIVE";
 
         clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
@@ -161,11 +163,6 @@ namespace KWShared
             clientsSessionsStates[client->socket]->dataToSend->clear();
 
             clientsSessionsStates.erase(client->socket);
-
-            
-            //todo: discover why this is crashing the server
-            //delete clientsSessionsStates[client->socket];
-
 
         }
         clientsSessionsStatesMutex.unlock();
@@ -369,6 +366,11 @@ namespace KWShared
                             sessionState->bufferStr.erase(sessionState->bufferStr.size() - 2, 2);
                             sessionState->tempHeaderParts = StringUtils::split(sessionState->bufferStr, ":");
 
+                            //trim tempHeaderParts
+                            for (auto &c : sessionState->tempHeaderParts)
+                                c = StringUtils::trim(c);
+
+
                             //remove possible  ' ' from start of value
                             if (sessionState->tempHeaderParts.size() > 1 && sessionState->tempHeaderParts[1].size() > 0 && sessionState->tempHeaderParts[1][0] == ' ')
                                 sessionState->tempHeaderParts[1].erase(0, 1);
@@ -425,8 +427,6 @@ namespace KWShared
                         //rawBuffer.clear();
                         sessionState->state = SEND_REQUEST_TO_APP;
                     }
-
-
                     break;
                 default:
                     break;
@@ -684,7 +684,7 @@ namespace KWShared
 
     bool KWTinyWebServer::isToKeepAlive(KWClientSessionState* sessionState)
     {
-        return sessionState->connection.find("KEEP-ALIVE") != string::npos;
+        return sessionState->connection.find("CLOSE") == string::npos;
     }
 
     void KWTinyWebServer::WebSocketProcess(shared_ptr<ClientInfo> client)

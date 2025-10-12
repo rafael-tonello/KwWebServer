@@ -105,7 +105,7 @@ namespace KWShared{
         shared_ptr<HttpData> receivedData, dataToSend;
         States state = READING_VERB;
         States prevState = READING_VERB;
-        string connection = "";
+        string connection = "KEEP-ALIVE";
         string upgrade = "";
         unsigned int currentContentLength = 0;
         bool webSocketOpen = false;
