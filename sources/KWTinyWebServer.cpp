@@ -141,6 +141,7 @@ namespace KWShared
         tmp->dataToSend->client = client;
         tmp->state = READING_VERB;
         tmp->connection = "KEEP-ALIVE";
+        tmp->processingIncomingData = false;
 
         clientsSessionsStatesMutex.lock();
         clientsSessionsStates[client->socket] = tmp;
