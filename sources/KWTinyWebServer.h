@@ -210,11 +210,11 @@ namespace KWShared{
             string _serverInfo;
             
             const string _serverName = "KWTinyWebServer embeded server";
-            const string _serverVersion = "2.2.3";
-            //                       | | |
-            //                       | | +------> Bugs fixes and compilation
-            //                       | +--------> New features
-            //
+            const string _serverVersion = "2.2.4";
+            //                             | | |
+            //                             | | +------> Bugs fixes and compilation
+            //                             | +--------> New features
+            //                             +----------> Major changes
             mutex clientsSessionsStatesMutex;
             map<int, shared_ptr<KWClientSessionState>> clientsSessionsStates;
             vector<string> __filesLocations;
