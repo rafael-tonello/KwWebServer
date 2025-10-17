@@ -121,7 +121,7 @@ namespace KWShared{
         
         bool ignoreKeepAlive = false;
 
-        int ws_tempIndex = 0;
+        unsigned long long  ws_tempIndex = 0;
         char ws_packSize7bit;
         int16_t ws_packSize16bit = 0;
         char ws_mask[4];
@@ -216,7 +216,7 @@ namespace KWShared{
             //                       | +--------> New features
             //
             mutex clientsSessionsStatesMutex;
-            map<int, KWClientSessionState*> clientsSessionsStates;
+            map<int, shared_ptr<KWClientSessionState>> clientsSessionsStates;
             vector<string> __filesLocations;
             string get_app_path();
             SysLink sysLink;
@@ -227,8 +227,8 @@ namespace KWShared{
             void dataReceivedFrom(shared_ptr<ClientInfo> client);
             void WebSocketProcess(shared_ptr<ClientInfo> client);
         
-            static bool isToKeepAlive(KWClientSessionState* sessionState);
-            void endHttpRequest(shared_ptr<ClientInfo> client, KWClientSessionState* sessionState);
+            static bool isToKeepAlive(shared_ptr<KWClientSessionState> sessionState);
+            void endHttpRequest(shared_ptr<ClientInfo> client, shared_ptr<KWClientSessionState> sessionState);
     };
 }
 #endif

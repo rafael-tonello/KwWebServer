@@ -133,9 +133,9 @@ namespace KWShared
     void KWTinyWebServer::initializeClient(shared_ptr<ClientInfo> client)
     {
         if (clientsSessionsStates.count(client->socket) > 0)
-            delete clientsSessionsStates[client->socket];
+            finalizeClient(client);
 
-        auto tmp = new KWClientSessionState();
+        auto tmp = std::make_shared<KWClientSessionState>();
         tmp->client = client;
         tmp->receivedData->client = client;
         tmp->dataToSend->client = client;
@@ -163,6 +163,7 @@ namespace KWShared
             clientsSessionsStates[client->socket]->receivedData->clear();
             clientsSessionsStates[client->socket]->dataToSend->clear();
 
+            //delete clientsSessionsStates[client->socket];
             clientsSessionsStates.erase(client->socket);
 
         }
@@ -212,7 +213,7 @@ namespace KWShared
             //throw std::runtime_error("data received for a no intialized client");
         }
 
-        KWClientSessionState *sessionState = clientsSessionsStates[client->socket];
+        shared_ptr<KWClientSessionState> sessionState = clientsSessionsStates[client->socket];
 
         if (sessionState == nullptr)
         {
@@ -540,8 +541,6 @@ namespace KWShared
                         secWebSocketBase64.clear();
                         concat.clear();
 
-                        //create a new thread to work with the web socket connection
-                        pthread_t *thWebSocketProcess = new pthread_t;
                         auto cl = shared_ptr<HttpData>(new HttpData(sessionState->receivedData.get()));
                         sessionState->webSocketOpen = true;
 
@@ -660,7 +659,7 @@ namespace KWShared
         }
     }
 
-    void KWTinyWebServer::endHttpRequest(shared_ptr<ClientInfo> client, KWClientSessionState* sessionState)
+    void KWTinyWebServer::endHttpRequest(shared_ptr<ClientInfo> client, shared_ptr<KWClientSessionState> sessionState)
     {
         if (sessionState->webSocketOpen)
             this->__observer->OnWebSocketConnect((sessionState->receivedData), sessionState->receivedData->resource);
@@ -683,14 +682,14 @@ namespace KWShared
         }
     }
 
-    bool KWTinyWebServer::isToKeepAlive(KWClientSessionState* sessionState)
+    bool KWTinyWebServer::isToKeepAlive(shared_ptr<KWClientSessionState> sessionState)
     {
         return sessionState->connection.find("CLOSE") == string::npos;
     }
 
     void KWTinyWebServer::WebSocketProcess(shared_ptr<ClientInfo> client)
     {
-        KWClientSessionState *sessionState = this->clientsSessionsStates[client->socket];
+        auto sessionState = this->clientsSessionsStates[client->socket];
 
         shared_ptr<HttpData>request = (sessionState->receivedData);
         string resource = request->resource;
@@ -843,7 +842,7 @@ namespace KWShared
                         char *fullPayload = new char[sessionState->ws_totalPayload];
 
                         //get all data from all framees of message
-                        for (int cPayload = 0; cPayload < sessionState->ws_payload.size(); cPayload++)
+                        for (size_t cPayload = 0; cPayload < sessionState->ws_payload.size(); cPayload++)
                         {
                             for (int cData = 0; cData < sessionState->ws_payloadSizes[cPayload]; cData++)
                             {
@@ -863,6 +862,7 @@ namespace KWShared
                         delete[] fullPayload;
                         sessionState->ws_totalPayload = 0;
                     }
+                    delete []sessionState->ws_packPayload;
                     sessionState->ws_packPayload = NULL;
 
                     sessionState->ws_tempIndex = 0;
@@ -911,7 +911,7 @@ namespace KWShared
         }
 
         //scrols through the files locations
-        for (int cont = 0; !breakFors && cont < this->__filesLocations.size(); cont++)
+        for (size_t cont = 0; !breakFors && cont < this->__filesLocations.size(); cont++)
         {
             //list files from directory
             filePath = this->__filesLocations[cont] + "/" + fName;

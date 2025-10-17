@@ -91,11 +91,11 @@ namespace KWShared{
         void clear()
         {
             resource.clear();
-            this->method.clear();
-            this->contentType.clear();
+            //this->method.clear();
+            //this->contentType.clear();
             this->setContentString("");
-            this->headers.clear();
-            this->httpMessage.clear();
+            //this->headers.clear();
+            //this->httpMessage.clear();
 
 
             for (auto &c: this->cookies)
