@@ -22,7 +22,7 @@ vector<string> KWShared::StringUtils::split(string source, vector<string> possib
     vector<string> result;
     
     string currentString = "";
-    int i = 0;
+    size_t i = 0;
     while (i < source.size())
     {
         char c = source[i];
@@ -59,7 +59,7 @@ std::string KWShared::StringUtils::toUpper(std::string source)
 
 std::string KWShared::StringUtils::toLower(std::string source)
 {
-    for (int cont = 0; cont < source.size(); cont++)
+    for (size_t cont = 0; cont < source.size(); cont++)
         source[cont] = (char)tolower(source[cont]);
 
     return source;
@@ -148,7 +148,7 @@ unsigned char* KWShared::StringUtils::base64_decode(std::string const& encoded_s
 
   //return ret;
   unsigned char* result = new unsigned char[ret.size()];
-  for (int c = 0; c < ret.size(); c++)
+  for (size_t c = 0; c < ret.size(); c++)
     result[c] = ret[c];
 
     return result;

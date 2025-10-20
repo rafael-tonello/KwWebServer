@@ -244,7 +244,7 @@ namespace KWShared{
 		vector<string> lines = this->split(&textResult, '\n');
 		if (lines.size() > 1)
 		{
-			for (int cont =0; cont < lines.size(); cont++)
+			for (size_t cont =0; cont < lines.size(); cont++)
 			{
 				tempIndex = lines[cont].find(":");
 				if (tempIndex != string::npos)

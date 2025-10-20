@@ -91,7 +91,7 @@ namespace KWShared
         );
 
         this->server->addReceiveListener(
-            [=](shared_ptr<ClientInfo> client, char *data, size_t dataSize)
+            [this](shared_ptr<ClientInfo> client, char *data, size_t dataSize)
             {
                 if (this->clientsSessionsStates.count(client->socket) <= 0)
                 {
@@ -112,7 +112,7 @@ namespace KWShared
                 {
                     clientState->processingIncomingData = true;
                     
-                    this->__tasks->enqueue([=](){
+                    this->__tasks->enqueue([this, client, clientState](){
                         if (!server->isConnected(client)) { return; }
 
                         this->dataReceivedFrom(client);
@@ -182,7 +182,7 @@ namespace KWShared
 
         if (source2)
         {
-            for (unsigned int cont = 0; ((source2Length == -1) && (source2[cont] != 0)) || (cont < source2Length); cont++)
+            for (int cont = 0; ((source2Length == -1) && (source2[cont] != 0)) || (cont < source2Length); cont++)
                 destination->push_back(source2[cont]);
         }
     }
