@@ -17,7 +17,7 @@ namespace KWShared{
                 httpData*/
 
                 //go over all headers looking for cookies
-                for (auto i = 0; i < httpData->headers.size(); i++)
+                for (size_t i = 0; i < httpData->headers.size(); i++)
                 {
                     auto headerUpper = this->strUtils.toUpper((httpData->headers[i][0]));
                     //checks if the current hreader is a cookie information

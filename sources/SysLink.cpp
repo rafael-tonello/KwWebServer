@@ -220,7 +220,7 @@ namespace KWShared{
 		//ls -lh *eita* | grep -e "^-"
 		//-rwxrwxrwx. 1 rafinha_tonello rafinha_tonello 220 Jan 13 15:14 receita salame
 		vector<string> result;
-		int tempIndex;
+		size_t tempIndex;
 		string tempString;
 		//determine a temporar file name
 		string tmpFile = "/tmp/gffd_tmp";

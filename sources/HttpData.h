@@ -121,7 +121,7 @@ namespace KWShared{
         void setContentString(string data)
         {
             this->contentBody = shared_ptr<char[]>(new char[data.size()]);
-            for (int cont = 0; cont < data.size(); cont++)
+            for (size_t cont = 0; cont < data.size(); cont++)
                 this->contentBody[cont] = data[cont];
 
 
@@ -134,7 +134,7 @@ namespace KWShared{
             if (this->contentBody == NULL || this->contentLength == 0)
                 return ret;
                 
-            for (auto cont = 0; cont < this->contentLength; cont++)
+            for (size_t cont = 0; cont < this->contentLength; cont++)
                 ret += this->contentBody[cont];
 
             return ret;
